@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"target": "es2020",
+
+		"noImplicitAny": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"moduleResolution": "node",
+		"sourceMap": true,
+		"strictNullChecks": true,
+		"resolveJsonModule": true,
+		"strict": true,
+		"module": "es2020",
+
+		"outDir": "build"
+	},
+	"include": [
+		"src/**/*"
+	]
+}
