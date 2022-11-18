@@ -47,6 +47,8 @@
     "webpack-remove-empty-scripts": "^1.0.1"
   },
   "dependencies": {
+    "@preact/signals": "^1.1.2",
+    "base64-js": "^1.5.1",
     "preact": "^10.11.3"
   }
 }

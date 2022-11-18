@@ -107,7 +107,13 @@ module.exports = {
         'space-unary-ops': ['error'],
 
         'react/react-in-jsx-scope': 'off',
-        'react/prop-types': 'off'
+        'react/prop-types': 'off',
+        '@typescript-eslint/no-misused-promises': [
+            'error',
+            {
+                checksVoidReturn: false
+            }
+        ]
     },
     parserOptions: {
         'ecmaVersion': 11,

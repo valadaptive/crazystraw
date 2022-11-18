@@ -1,3 +1,11 @@
 import {render} from 'preact';
 
-render(<div>Hello World!</div>, document.body);
+import App from './components/App/App';
+
+import {AppContext, store} from './util/state';
+
+render(
+    <AppContext.Provider value={store}>
+        <App />
+    </AppContext.Provider>,
+    document.body);
