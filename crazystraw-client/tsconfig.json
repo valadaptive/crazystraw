@@ -1,20 +1,11 @@
+
 {
+	"extends": "../tsconfig.json",
 	"compilerOptions": {
 		"jsx": "preserve",
 		"jsxImportSource": "preact",
 		"target": "es2020",
-
-		"noImplicitAny": true,
-		"esModuleInterop": true,
-		"allowSyntheticDefaultImports": true,
-		"moduleResolution": "node",
-		"sourceMap": true,
-		"types": [],
-		"strictNullChecks": true,
-		"resolveJsonModule": true,
-		"strict": true,
 		"noErrorTruncation": true,
-
 		"outDir": "build"
 	},
 	"include": [

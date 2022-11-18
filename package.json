@@ -2,6 +2,7 @@
   "name": "crazystraw",
   "workspaces": [
     "crazystraw-client",
-    "crazystraw-server"
+    "crazystraw-server",
+    "crazystraw-common"
   ]
 }
