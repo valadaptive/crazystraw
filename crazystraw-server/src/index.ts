@@ -1,9 +1,13 @@
 import {WebSocketServer, WebSocket} from 'ws';
 import dotenv from 'dotenv';
+import {randomBytes, subtle} from 'crypto';
+import {setTimeout} from 'timers';
 
 import {
     GatewayMessage,
-    GatewayMessageType
+    GatewayMessageType,
+    ChallengeMessage,
+    GatewayCloseCode
 } from 'crazystraw-common/ws-types';
 
 console.log('hi');
@@ -24,23 +28,107 @@ function expectNumber (value: string | undefined): number | undefined {
 const config = {
     port: orError(expectNumber(process.env.PORT), 'Expected port number')
 };
-const socketsByIdentity = new Map<string, WebSocket>();
 
-const respondToMessage = (message: GatewayMessage, ws: WebSocket): GatewayMessage | undefined => {
+const CHALLENGE_TIMEOUT = 5 * 1000;
+
+//const socketsByIdentity = new Map<string, WebSocket>();
+
+type ChallengeState = {
+    publicKey: CryptoKey,
+    challenge: Buffer,
+    for: number
+};
+
+const waitingChallenges = new WeakMap<WebSocket, ChallengeState>();
+
+const respondToMessage = async (
+    message: GatewayMessage,
+    send: (message: Omit<GatewayMessage, 'seq'>) => Promise<number>,
+    ws: WebSocket
+): Promise<void> => {
     switch (message.type) {
         case GatewayMessageType.IDENTIFY: {
-            socketsByIdentity.set(message.myIdentity.username, ws);
-            ws.addEventListener('close', () => {
-                socketsByIdentity.delete(message.myIdentity.username);
+            let publicKey;
+            try {
+                publicKey = await subtle.importKey(
+                    'raw',
+                    Buffer.from(message.publicKey, 'base64'),
+                    {name: 'ECDSA', namedCurve: 'P-256'},
+                    true,
+                    ['verify']
+                );
+            } catch (err) {
+                ws.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid public key format.');
+                return;
+            }
+
+            const challenge = randomBytes(16);
+            const ret = {
+                type: GatewayMessageType.CHALLENGE,
+                for: message.seq,
+                challenge: challenge.toString('base64')
+            };
+
+            const challengeSeq = await send(ret);
+            waitingChallenges.set(ws, {
+                publicKey,
+                challenge,
+                for: challengeSeq
             });
+
+            setTimeout(() => {
+                waitingChallenges.delete(ws);
+                ws.close(GatewayCloseCode.CHALLENGE_TIMEOUT, 'Challenge timed out');
+            }, CHALLENGE_TIMEOUT);
             return;
         }
+        case GatewayMessageType.CHALLENGE_RESPONSE: {
+            const waitingChallenge = waitingChallenges.get(ws);
+            if (!waitingChallenge) {
+                // This will also be thrown if the client responds just after the challenge times out.
+                // No big deal.
+                ws.close(GatewayCloseCode.INVALID_STATE, 'Challenge does not exist');
+                return;
+            }
+
+            if (waitingChallenge.for !== message.for) {
+                ws.close(GatewayCloseCode.INVALID_STATE, 'Incorrect challenge response sequence number');
+                return;
+            }
+
+            const responseSignature = Buffer.from(message.response, 'base64');
+
+            try {
+                const isValid = await subtle.verify(
+                    'ECDSA',
+                    waitingChallenge.publicKey,
+                    responseSignature,
+                    waitingChallenge.challenge
+                );
+
+                if (isValid) {
+                    const resp = {
+                        type: GatewayMessageType.CHALLENGE_SUCCESS,
+                        for: waitingChallenge.for
+                    };
+                    await send(resp);
+                } else {
+                    ws.close(GatewayCloseCode.CHALLENGE_FAILED, 'Challenge failed');
+                }
+                return;
+            } catch (err) {
+                ws.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format.');
+            }
+
+            break;
+        }
         case GatewayMessageType.REQUEST_PEER: {
-            return {
+            /*return {
                 connectionID: message.connectionID,
                 type: GatewayMessageType.REQUEST_ACK,
                 timeout: Date.now() + (60 * 1000)
-            };
+            };*/
+            break;
         }
         default: {
             throw new Error('Unknown message type');
@@ -51,12 +139,22 @@ const respondToMessage = (message: GatewayMessage, ws: WebSocket): GatewayMessag
 const server = new WebSocketServer({port: config.port});
 
 server.on('connection', ws => {
+    let seq = 1;
+    const send = (message: Omit<GatewayMessage, 'seq'>): Promise<number> => {
+        const messageSeq = seq;
+        (message as GatewayMessage).seq = messageSeq;
+        seq += 2;
+        return new Promise((resolve, reject) => {
+            ws.send(message, err => {
+                err ? reject() : resolve(messageSeq);
+            });
+        });
+    };
     ws.addEventListener('message', evt => {
         try {
             if (typeof evt.data !== 'string') return;
             const parsedData = JSON.parse(evt.data) as GatewayMessage;
-            const message = respondToMessage(parsedData, ws);
-            if (message) ws.send(message);
+            void respondToMessage(parsedData, send, ws);
         } catch (err) {
             // swallow errors
         }

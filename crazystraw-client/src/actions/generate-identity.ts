@@ -1,4 +1,4 @@
-import {batch} from '@preact/signals';
+import {signal, batch} from '@preact/signals';
 
 import Identity from '../rtc/identity';
 import Profile from '../rtc/profile';
@@ -22,6 +22,7 @@ const generateIdentity = async (
         batch(() => {
             state.userDataState.value = UserDataState.LOADED;
             state.savedUserData.value = exportedUserData;
+            state.userData.value = {profile: signal(profile), identity: signal(identity)};
         });
     } catch (err) {
         state.userDataState.value = UserDataState.NONEXISTENT;

@@ -29,8 +29,10 @@ const App = (): JSX.Element => {
         );
     }
 
+    console.log(userData.value);
+
     return (
-        <div>{userData.value}</div>
+        <div>{savedUserData.value}</div>
     );
 
     /* An identity already exists. Please enter the decryption password: */

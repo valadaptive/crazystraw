@@ -106,7 +106,7 @@ class Connection extends EventTarget {
             const onMessage = (evt: MessageEvent): void => {
                 try {
                     const parsedData = JSON.parse(evt.data as string) as GatewayMessage;
-                    if (parsedData.connectionID !== id) return;
+                    //if (parsedData.connectionID !== id) return;
                     console.log(parsedData);
                 } catch (err) {
                     // The message may not have been meant for us. Swallow the error.

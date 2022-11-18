@@ -2,11 +2,15 @@ import type {JSX} from 'preact';
 
 import {useMemo, useState} from 'preact/hooks';
 
+import generateIdentityAction from '../../actions/generate-identity';
+
 import {useAppState, useAction} from '../../util/state';
 import resizeAvatar from '../../util/resize-avatar';
 import createFileUploadDialog from '../../util/create-file-upload-dialog';
 
 const SetupPrompt = (): JSX.Element => {
+    const generateIdentity = useAction(generateIdentityAction);
+
     const [handle, setHandle] = useState('');
     const [password, setPassword] = useState('');
 
@@ -32,6 +36,14 @@ const SetupPrompt = (): JSX.Element => {
         });
     }, [setAvatar]);
 
+    const createIdentity = useMemo(() => () => {
+        generateIdentity({
+            handle,
+            avatar: null,
+            bio: null
+        }, password);
+    }, [handle, password]);
+
     return (
         <div>
             <div>It seems this is your first time using CrazyStraw. Enter some details:</div>
@@ -51,7 +63,7 @@ const SetupPrompt = (): JSX.Element => {
                 <input type="password" value={password} onInput={onPasswordInput} />
             </div>
 
-            <button disabled={handle.length === 0 || password.length === 0}>Create</button>
+            <button disabled={handle.length === 0 || password.length === 0} onClick={createIdentity}>Create</button>
 
             <hr />
 
