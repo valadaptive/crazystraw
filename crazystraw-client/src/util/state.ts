@@ -1,9 +1,10 @@
 import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
-import {signal, effect, Signal, batch} from '@preact/signals';
+import {signal, effect, Signal, batch, computed} from '@preact/signals';
 
 import Identity from '../rtc/identity';
 import Profile from '../rtc/profile';
+import {ConnectionManager} from '../rtc/gateway';
 
 const enum UserDataState {
     SAVED_BUT_NOT_LOADED,
@@ -21,14 +22,18 @@ type AppState = {
         profile: Signal<Profile>,
         identity: Signal<Identity>
     } | null>,
-    userDataState: Signal<UserDataState>
+    userDataState: Signal<UserDataState>,
+    connectionManager: Signal<ConnectionManager | null>
 };
 
+const CONNECTION_SERVER = 'ws://localhost:9876';
+
 const createStore = (): AppState => {
-    const defaultStore: AppState = {
+    const store: AppState = {
         savedUserData: signal(null),
         userData: signal(null),
-        userDataState: signal(UserDataState.NONEXISTENT)
+        userDataState: signal(UserDataState.NONEXISTENT),
+        connectionManager: signal(null)
     };
 
     /*const savedIdentity = localStorage.getItem('identity');
@@ -39,7 +44,31 @@ const createStore = (): AppState => {
         });
     }*/
 
-    return defaultStore;
+    effect(() => {
+        const savedIdentity = store.savedUserData.value;
+        if (savedIdentity === null) {
+            localStorage.removeItem('userData');
+        } else {
+            localStorage.setItem('userData', savedIdentity);
+        }
+    });
+
+    effect(() => {
+        if (store.userData.value) {
+            console.log('prev conn manager: ', store.connectionManager.peek());
+            const prevConnectionManager = store.connectionManager.peek();
+            if (prevConnectionManager) prevConnectionManager.close();
+            void ConnectionManager.create(
+                CONNECTION_SERVER,
+                store.userData.value.identity.value
+            ).then((cm): void => {
+                store.connectionManager.value = cm;
+                console.log(store.connectionManager.peek());
+            });
+        }
+    });
+
+    return store;
 };
 
 const store = createStore();
@@ -55,15 +84,6 @@ const useAction = <T extends unknown[]>(
     const context = useContext(AppContext);
     return useMemo(() => func.bind(null, context), [context]);
 };
-
-effect(() => {
-    const savedIdentity = store.savedUserData.value;
-    if (savedIdentity === null) {
-        localStorage.removeItem('identity');
-    } else {
-        localStorage.setItem('identity', savedIdentity);
-    }
-});
 
 export {useAppState, useAction, AppState, AppContext, store};
 

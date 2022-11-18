@@ -1,7 +1,10 @@
+import style from './style.scss';
+
 import type {JSX} from 'preact';
 import {useState, useMemo, useEffect} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 
+import TopBar from '../TopBar/TopBar';
 import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
 
@@ -16,23 +19,26 @@ const App = (): JSX.Element => {
     const {userData, savedUserData, userDataState} = useAppState();
     const generateIdentity = useAction(generateIdentityAction);
 
-    if (userDataState.value === UserDataState.NONEXISTENT) {
-        return (
-            <SetupPrompt/>
-        );
-    } else if (userDataState.value === UserDataState.SAVED_BUT_NOT_LOADED) {
-        return (
-            <PasswordPrompt
-                onEnter={() => {}}
-                message="It seems this is your first time using CrazyStraw. Enter a password:"
-            />
-        );
-    }
-
-    console.log(userData.value);
+    const prompt = useMemo(() => {
+        if (userDataState.value === UserDataState.NONEXISTENT) {
+            return (
+                <SetupPrompt/>
+            );
+        } else if (userDataState.value === UserDataState.SAVED_BUT_NOT_LOADED) {
+            return (
+                <PasswordPrompt
+                    onEnter={() => {}}
+                    message="It seems this is your first time using CrazyStraw. Enter a password:"
+                />
+            );
+        }
+    }, [userDataState.value]);
 
     return (
-        <div>{savedUserData.value}</div>
+        <div className={style.app}>
+            <TopBar />
+            {prompt}
+        </div>
     );
 
     /* An identity already exists. Please enter the decryption password: */

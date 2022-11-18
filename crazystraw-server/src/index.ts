@@ -1,7 +1,7 @@
 import {WebSocketServer, WebSocket} from 'ws';
 import dotenv from 'dotenv';
 import {randomBytes, subtle} from 'crypto';
-import {setTimeout} from 'timers';
+import {setTimeout, clearTimeout} from 'timers';
 
 import {
     GatewayMessage,
@@ -9,8 +9,6 @@ import {
     ChallengeMessage,
     GatewayCloseCode
 } from 'crazystraw-common/ws-types';
-
-console.log('hi');
 
 dotenv.config();
 
@@ -36,7 +34,8 @@ const CHALLENGE_TIMEOUT = 5 * 1000;
 type ChallengeState = {
     publicKey: CryptoKey,
     challenge: Buffer,
-    for: number
+    for: number,
+    timeout: NodeJS.Timeout
 };
 
 const waitingChallenges = new WeakMap<WebSocket, ChallengeState>();
@@ -73,13 +72,12 @@ const respondToMessage = async (
             waitingChallenges.set(ws, {
                 publicKey,
                 challenge,
-                for: challengeSeq
+                for: challengeSeq,
+                timeout: setTimeout(() => {
+                    waitingChallenges.delete(ws);
+                    ws.close(GatewayCloseCode.CHALLENGE_TIMEOUT, 'Challenge timed out');
+                }, CHALLENGE_TIMEOUT)
             });
-
-            setTimeout(() => {
-                waitingChallenges.delete(ws);
-                ws.close(GatewayCloseCode.CHALLENGE_TIMEOUT, 'Challenge timed out');
-            }, CHALLENGE_TIMEOUT);
             return;
         }
         case GatewayMessageType.CHALLENGE_RESPONSE: {
@@ -91,6 +89,8 @@ const respondToMessage = async (
                 return;
             }
 
+            clearTimeout(waitingChallenge.timeout);
+
             if (waitingChallenge.for !== message.for) {
                 ws.close(GatewayCloseCode.INVALID_STATE, 'Incorrect challenge response sequence number');
                 return;
@@ -100,7 +100,7 @@ const respondToMessage = async (
 
             try {
                 const isValid = await subtle.verify(
-                    'ECDSA',
+                    {name: 'ECDSA', hash: 'SHA-256'},
                     waitingChallenge.publicKey,
                     responseSignature,
                     waitingChallenge.challenge
@@ -117,7 +117,8 @@ const respondToMessage = async (
                 }
                 return;
             } catch (err) {
-                ws.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format.');
+                console.error(err);
+                ws.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format');
             }
 
             break;
@@ -145,7 +146,7 @@ server.on('connection', ws => {
         (message as GatewayMessage).seq = messageSeq;
         seq += 2;
         return new Promise((resolve, reject) => {
-            ws.send(message, err => {
+            ws.send(JSON.stringify(message), err => {
                 err ? reject() : resolve(messageSeq);
             });
         });
@@ -161,7 +162,7 @@ server.on('connection', ws => {
         //console.log(evt, evt.data);
     });
     console.log('Connection!');
-    console.log(ws);
+    //console.log(ws);
 });
 
 console.log(`Server running on port ${config.port}...`);

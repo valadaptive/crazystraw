@@ -33,6 +33,7 @@ const resizeAvatar = async (image: Blob): Promise<Blob> => {
         canvas.width = canvas.height = resultDimension;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Could not create canvas context');
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(imgElem, xOffset, yOffset, destWidth, destHeight);
 
         URL.revokeObjectURL(blobURL);

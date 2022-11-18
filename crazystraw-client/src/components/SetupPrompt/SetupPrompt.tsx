@@ -7,40 +7,43 @@ import generateIdentityAction from '../../actions/generate-identity';
 import {useAppState, useAction} from '../../util/state';
 import resizeAvatar from '../../util/resize-avatar';
 import createFileUploadDialog from '../../util/create-file-upload-dialog';
+import useBlobURL from '../../util/use-blob-url';
 
 const SetupPrompt = (): JSX.Element => {
     const generateIdentity = useAction(generateIdentityAction);
 
     const [handle, setHandle] = useState('');
+    const [bio, setBio] = useState('');
     const [password, setPassword] = useState('');
 
     const onHandleInput = useMemo(() => (event: Event) => {
         setHandle((event.target as HTMLInputElement).value);
     }, [setHandle]);
 
+    const onBioInput = useMemo(() => (event: Event) => {
+        setBio((event.target as HTMLTextAreaElement).value);
+    }, [setBio]);
+
     const onPasswordInput = useMemo(() => (event: Event) => {
         setPassword((event.target as HTMLInputElement).value);
     }, [setPassword]);
 
-    const [avatar, setAvatar] = useState<string | null>(null);
+    const [avatar, setAvatar] = useState<Blob | null>(null);
+    const avatarURL = useBlobURL(avatar);
 
     const onClickUploadAvatar = useMemo(() => async () => {
         const file = await createFileUploadDialog({accept: 'image/*'});
         if (!file) return;
 
         const resized = await resizeAvatar(file);
-
-        setAvatar(prevAvatar => {
-            if (prevAvatar !== null) URL.revokeObjectURL(prevAvatar);
-            return URL.createObjectURL(resized);
-        });
+        setAvatar(resized);
     }, [setAvatar]);
 
     const createIdentity = useMemo(() => () => {
         generateIdentity({
             handle,
-            avatar: null,
-            bio: null
+            avatar,
+            bio
         }, password);
     }, [handle, password]);
 
@@ -54,7 +57,11 @@ const SetupPrompt = (): JSX.Element => {
             <div>
                 <label>Avatar (optional):</label>
                 <button onClick={onClickUploadAvatar}>Upload</button>
-                {avatar ? <img src={avatar} /> : null}
+                {avatarURL ? <img src={avatarURL} /> : null}
+            </div>
+            <div>
+                <label>Bio (optional):</label>
+                <textarea value={bio} onInput={onBioInput} />
             </div>
             <hr />
 

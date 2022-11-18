@@ -1,5 +1,7 @@
 import {toByteArray, fromByteArray} from 'base64-js';
 
+const ECDSA_PARAMS = {name: 'ECDSA', namedCurve: 'P-256'};
+
 class Identity {
     public publicKey: CryptoKey;
     public privateKey: CryptoKey;
@@ -17,6 +19,10 @@ class Identity {
         this.privateKey = privateKey;
         this.rawPublicKey = rawPublicKey;
         this.publicKeyFingerprint = publicKeyFingerprint;
+    }
+
+    async sign (data: ArrayBuffer | ArrayBufferView | DataView): Promise<ArrayBuffer> {
+        return crypto.subtle.sign({name: 'ECDSA', hash: 'SHA-256'}, this.privateKey, data);
     }
 
     private static async deriveKeyFromPassword (password: string, salt: ArrayBuffer): Promise<CryptoKey> {
@@ -96,14 +102,14 @@ class Identity {
             encryptedPrivateKey,
             unwrappingKey,
             {name: 'AES-GCM', iv},
-            {name: 'ECDSA', namedCurve: 'P-256'},
+            ECDSA_PARAMS,
             true,
             ['sign', 'verify']);
 
         const publicKey = await crypto.subtle.importKey(
             'raw',
             importedPublicKey,
-            {name: 'ECDSA', namedCurve: 'P-256'},
+            ECDSA_PARAMS,
             true,
             ['sign', 'verify']
         );
@@ -114,7 +120,7 @@ class Identity {
     }
 
     static async generate (): Promise<Identity> {
-        const keyPair = await crypto.subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify']);
+        const keyPair = await crypto.subtle.generateKey(ECDSA_PARAMS, true, ['sign', 'verify']);
         const rawPublicKey = await crypto.subtle.exportKey('raw', keyPair.publicKey);
         const fingerprint = await crypto.subtle.digest('SHA-256', rawPublicKey);
         return new Identity(
