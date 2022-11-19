@@ -8,31 +8,25 @@ import TopBar from '../TopBar/TopBar';
 import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
 
-import generateIdentityAction from '../../actions/generate-identity';
+import createProfileAction from '../../actions/create-profile';
 
-import {ConnectionManager} from '../../rtc/gateway';
+import {useAppState, useAction, ProfileState} from '../../util/state';
 
-import {useAppState, useAction, UserDataState} from '../../util/state';
-
-const CONNECTION_SERVER = 'ws://localhost:9876';
 const App = (): JSX.Element => {
-    const {userData, savedUserData, userDataState} = useAppState();
-    const generateIdentity = useAction(generateIdentityAction);
+    const {profile, savedProfile, profileState} = useAppState();
+    const createProfile = useAction(createProfileAction);
 
-    const prompt = useMemo(() => {
-        if (userDataState.value === UserDataState.NONEXISTENT) {
+    const prompt = useComputed(() => {
+        if (profileState.value === ProfileState.NONEXISTENT) {
             return (
-                <SetupPrompt/>
+                <SetupPrompt />
             );
-        } else if (userDataState.value === UserDataState.SAVED_BUT_NOT_LOADED) {
+        } else if (profileState.value === ProfileState.SAVED_BUT_NOT_LOADED) {
             return (
-                <PasswordPrompt
-                    onEnter={() => {}}
-                    message="It seems this is your first time using CrazyStraw. Enter a password:"
-                />
+                <PasswordPrompt />
             );
         }
-    }, [userDataState.value]);
+    }).value;
 
     return (
         <div className={style.app}>

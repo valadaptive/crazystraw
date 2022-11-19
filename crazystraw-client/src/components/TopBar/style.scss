@@ -1,4 +1,14 @@
+@use '../../colors.scss' as col;
+
 .top-bar {
     display: flex;
+    background-color: col.$base-color-tertiary;
+    padding: 0 0.5rem;
+    height: 3.5rem;
+}
+
+.profile-info {
+    display: flex;
+    gap: 0.25rem;
     align-items: center;
 }

@@ -2,11 +2,10 @@ import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
 import {signal, effect, Signal, batch, computed} from '@preact/signals';
 
-import Identity from '../rtc/identity';
 import Profile from '../rtc/profile';
 import {ConnectionManager} from '../rtc/gateway';
 
-const enum UserDataState {
+const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
     NONEXISTENT,
     GENERATING,
@@ -17,12 +16,9 @@ const enum UserDataState {
  * Global application state
  */
 type AppState = {
-    savedUserData: Signal<string | null>,
-    userData: Signal<{
-        profile: Signal<Profile>,
-        identity: Signal<Identity>
-    } | null>,
-    userDataState: Signal<UserDataState>,
+    savedProfile: Signal<string | null>,
+    profile: Signal<Profile | null>
+    profileState: Signal<ProfileState>,
     connectionManager: Signal<ConnectionManager | null>
 };
 
@@ -30,41 +26,43 @@ const CONNECTION_SERVER = 'ws://localhost:9876';
 
 const createStore = (): AppState => {
     const store: AppState = {
-        savedUserData: signal(null),
-        userData: signal(null),
-        userDataState: signal(UserDataState.NONEXISTENT),
+        savedProfile: signal(null),
+        profile: signal(null),
+        profileState: signal(ProfileState.NONEXISTENT),
         connectionManager: signal(null)
     };
 
-    /*const savedIdentity = localStorage.getItem('identity');
-    if (savedIdentity !== null) {
+    const savedProfile = localStorage.getItem('profile');
+    if (savedProfile !== null) {
         batch(() => {
-            defaultStore.savedIdentity.value = savedIdentity;
-            defaultStore.identityGenerationState.value = IdentityState.SAVED_BUT_NOT_LOADED;
+            store.savedProfile.value = savedProfile;
+            store.profileState.value = ProfileState.SAVED_BUT_NOT_LOADED;
         });
-    }*/
+    }
 
+    // Persist profile to storage
     effect(() => {
-        const savedIdentity = store.savedUserData.value;
+        const savedIdentity = store.savedProfile.value;
         if (savedIdentity === null) {
-            localStorage.removeItem('userData');
+            localStorage.removeItem('profile');
         } else {
-            localStorage.setItem('userData', savedIdentity);
+            localStorage.setItem('profile', savedIdentity);
         }
     });
 
+    // Close the old connection manager when the profile changes or is deleted
     effect(() => {
-        if (store.userData.value) {
-            console.log('prev conn manager: ', store.connectionManager.peek());
-            const prevConnectionManager = store.connectionManager.peek();
+        const prevConnectionManager = store.connectionManager.peek();
+        if (store.profile.value) {
             if (prevConnectionManager) prevConnectionManager.close();
             void ConnectionManager.create(
                 CONNECTION_SERVER,
-                store.userData.value.identity.value
+                store.profile.value.identity
             ).then((cm): void => {
                 store.connectionManager.value = cm;
-                console.log(store.connectionManager.peek());
             });
+        } else {
+            if (prevConnectionManager) prevConnectionManager.close();
         }
     });
 
@@ -87,4 +85,4 @@ const useAction = <T extends unknown[]>(
 
 export {useAppState, useAction, AppState, AppContext, store};
 
-export {UserDataState};
+export {ProfileState};

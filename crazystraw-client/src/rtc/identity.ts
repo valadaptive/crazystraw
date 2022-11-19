@@ -78,9 +78,8 @@ class Identity {
         };
     }
 
-    async import (json: string, password: string): Promise<Identity> {
-        const parsedJson = JSON.parse(json) as Partial<Record<string, unknown>>;
-        const {privateKey: privateKeyStr, publicKey: publicKeyStr, salt: saltStr, iv: ivStr} = parsedJson;
+    static async import (json: Partial<Record<string, unknown>>, password: string): Promise<Identity> {
+        const {privateKey: privateKeyStr, publicKey: publicKeyStr, salt: saltStr, iv: ivStr} = json;
         if (
             typeof privateKeyStr !== 'string' ||
             typeof publicKeyStr !== 'string' ||
@@ -104,14 +103,14 @@ class Identity {
             {name: 'AES-GCM', iv},
             ECDSA_PARAMS,
             true,
-            ['sign', 'verify']);
+            ['sign']);
 
         const publicKey = await crypto.subtle.importKey(
             'raw',
             importedPublicKey,
             ECDSA_PARAMS,
             true,
-            ['sign', 'verify']
+            ['verify']
         );
 
         const fingerprint = await crypto.subtle.digest('SHA-256', importedPublicKey);

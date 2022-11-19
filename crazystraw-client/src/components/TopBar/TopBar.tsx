@@ -5,18 +5,27 @@ import {useComputed} from '@preact/signals';
 
 import Avatar from '../Avatar/Avatar';
 
-import {useAppState, useAction, UserDataState} from '../../util/state';
+import deleteProfileAction from '../../actions/delete-profile';
+
+import bytesToHex from '../../util/bytes-to-hex';
+import {useAppState, useAction} from '../../util/state';
 
 const TopBar = (): JSX.Element => {
-    const {userData} = useAppState();
+    const {profile} = useAppState();
+    const deleteProfile = useAction(deleteProfileAction);
 
     const profileInfo = useComputed(() => {
-        const profile = userData.value?.profile.value;
+        const profileData = profile.value;
         console.log(profile);
-        return <>
-            <Avatar size={32} data={profile?.avatar ?? null} />
-            <div className={style.handle}>{profile?.handle ?? 'No user data'}</div>
-        </>;
+
+        return <div className={style.profileInfo}>
+            <Avatar size={32} data={profileData?.avatar ?? null} />
+            <div className={style.handle}>{profileData?.handle ?? 'No user data'}</div>
+            {profileData ?
+                <div className={style.fingerprint}>{bytesToHex(profileData.identity.publicKeyFingerprint)}</div> :
+                null}
+            {profileData ? <button onClick={deleteProfile}>Delete profile</button> : null}
+        </div>;
     }).value;
 
     return (

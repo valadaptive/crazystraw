@@ -2,7 +2,7 @@ import type {JSX} from 'preact';
 
 import {useMemo, useState} from 'preact/hooks';
 
-import generateIdentityAction from '../../actions/generate-identity';
+import createProfileAction from '../../actions/create-profile';
 
 import {useAppState, useAction} from '../../util/state';
 import resizeAvatar from '../../util/resize-avatar';
@@ -10,7 +10,7 @@ import createFileUploadDialog from '../../util/create-file-upload-dialog';
 import useBlobURL from '../../util/use-blob-url';
 
 const SetupPrompt = (): JSX.Element => {
-    const generateIdentity = useAction(generateIdentityAction);
+    const createProfile = useAction(createProfileAction);
 
     const [handle, setHandle] = useState('');
     const [bio, setBio] = useState('');
@@ -40,7 +40,7 @@ const SetupPrompt = (): JSX.Element => {
     }, [setAvatar]);
 
     const createIdentity = useMemo(() => () => {
-        generateIdentity({
+        createProfile({
             handle,
             avatar,
             bio

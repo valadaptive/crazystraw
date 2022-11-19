@@ -1,0 +1,14 @@
+@use './colors.scss' as col;
+
+html, body {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background-color: col.$base-color-primary;
+    color: col.$text;
+    font-family: sans-serif;
+    scrollbar-color: col.$base-color-tertiary col.$base-color-primary;
+}

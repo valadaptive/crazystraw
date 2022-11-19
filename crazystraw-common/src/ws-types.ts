@@ -15,7 +15,7 @@ export const enum GatewayMessageType {
     /** Sent from the server to acknowledge a REQUEST_PEER message. */
     REQUEST_PEER_ACK,
     /** Sent from the server to tell the client a peer has responded to its request. */
-    PEER_OFFER,
+    PEER_ANSWER,
     /** Sent from the client to tell the server that a peer request was cancelled by the client. */
     REQUEST_PEER_CANCEL,
     /** Sent from the server to tell the client that a peer request timed out on the server. */
@@ -45,7 +45,11 @@ export const enum GatewayCloseCode {
     /** The client sent a message that is not valid at this point in time. */
     INVALID_STATE,
     /** Some data sent by the client or server is of an invalid format. */
-    INVALID_FORMAT
+    INVALID_FORMAT,
+    /** The client attempted to perform an action which requires authentication, but did not authenticate. */
+    NOT_AUTHENTICATED,
+    /** Another client is already logged in using the same public key */
+    EXISTING_SESSION
 }
 
 /** Connection ID; used to disambiguate between different connections being established. */
@@ -104,21 +108,21 @@ export type RequestPeerAckMessage = GatewayMessageBase & {
     timeout: number
 };
 
-export type PeerOfferMessage = GatewayMessageBase & {
-    type: GatewayMessageType.PEER_OFFER,
+export type PeerAnswerMessage = GatewayMessageBase & {
+    type: GatewayMessageType.PEER_ANSWER,
     /** Sequence number of the original REQUEST_PEER message. */
     for: number,
-    /** SDP offer, for WebRTC. */
-    offer: {
-        type: 'offer',
+    /** SDP answer, for WebRTC. */
+    answer: {
+        type: 'answer',
         sdp: string
     }
 };
 
 export type RequestPeerCancelMessage = GatewayMessageBase & {
     type: GatewayMessageType.REQUEST_PEER_CANCEL,
-    /** Sequence number of the original REQUEST_PEER message. */
-    for: number
+    /** The peer's public key, encoded into base64. */
+    peerIdentity: string
 };
 
 export type RequestPeerTimeoutMessage = GatewayMessageBase & {
@@ -150,11 +154,11 @@ export type GotPeerRequestMessage = GatewayMessageBase & {
 
 export type PeerResponseMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_RESPONSE,
-    /** The sequence number of the original GOT_PEER_REQUEST message. */
-    for: number,
-    /** SDP offer, for WebRTC. */
-    offer: {
-        type: 'offer',
+    /** The public key of the peer requesting us, encoded into base64. */
+    peerIdentity: string,
+    /** SDP answer, for WebRTC. */
+    answer: {
+        type: 'answer',
         sdp: string
     }
 };
@@ -172,7 +176,7 @@ ChallengeResponseMessage |
 ChallengeSuccessMessage |
 RequestPeerMessage |
 RequestPeerAckMessage |
-PeerOfferMessage |
+PeerAnswerMessage |
 RequestPeerCancelMessage |
 RequestPeerTimeoutMessage |
 RequestPeerRejectMessage |

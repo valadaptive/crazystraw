@@ -1,3 +1,5 @@
+import {toByteArray, fromByteArray} from 'base64-js';
+
 import Identity from './identity';
 
 class Profile {
@@ -20,12 +22,31 @@ class Profile {
 
     public async export (password: string): Promise<string> {
         const exportedIdentity = await this.identity.export(password);
+        const avatar = this.avatar ? fromByteArray(new Uint8Array(await this.avatar.arrayBuffer())) : null;
         return JSON.stringify({
             identity: exportedIdentity,
             handle: this.handle,
-            avatar: this.avatar,
+            avatar,
             bio: this.bio
         });
+    }
+
+    public static async import (json: string, password: string): Promise<Profile> {
+        const parsedJson = JSON.parse(json) as Partial<Record<string, unknown>>;
+        const {handle, bio, avatar: avatarStr, identity: identityJson} = parsedJson;
+        if (
+            typeof handle !== 'string' ||
+            (typeof bio !== 'string' && bio !== null) ||
+            (typeof avatarStr !== 'string' && avatarStr !== null) ||
+            (typeof identityJson !== 'object' || identityJson === null)
+        ) {
+            throw new Error('Invalid JSON');
+        }
+
+        const identity = await Identity.import(identityJson, password);
+        const avatar = avatarStr ? new Blob([toByteArray(avatarStr)]) : null;
+
+        return new Profile(identity, handle, avatar, bio);
     }
 }
 
