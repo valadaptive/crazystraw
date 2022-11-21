@@ -1,0 +1,13 @@
+- WebSocket protocol for establishing WebRTC connections
+    - Upon entering the password, the app connects to a server to send and receive connection requests
+    - Only one session per public key
+    - Challenge/response authentication to prevent unauthenticated users from taking up sessions and causing a denial of service
+    - SDP offers are exchanged by the server to connected users by public key
+- Identity consists of a fixed ECDSA key pair + modifiable user profile
+    - Users can be added to contacts list via public key (source of truth)
+- To generate a shared secret:
+    - Establish a WebRTC connection
+    - Each user generates an ephemeral ECDH key pair
+    - Each user signs the generated ECDH public key using their identity public key, then sends it over the wire
+    - They receive each other's signed (just-generated) ECDH keys, verify the signatures, then combine them with their own ECDH private keys to derive a shared secret (standard ECDH)
+    - This provides both authentication and an initial ephemeral shared secret

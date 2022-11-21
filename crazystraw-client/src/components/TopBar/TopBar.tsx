@@ -4,6 +4,7 @@ import type {JSX} from 'preact';
 import {useComputed} from '@preact/signals';
 
 import Avatar from '../Avatar/Avatar';
+import GatewayConnectionIndicator from '../GatewayConnectionIndicator/GatewayConnectionIndicator';
 
 import deleteProfileAction from '../../actions/delete-profile';
 
@@ -31,6 +32,9 @@ const TopBar = (): JSX.Element => {
     return (
         <div className={style.topBar}>
             {profileInfo}
+            <div className={style.connectionIndicator}>
+                <GatewayConnectionIndicator />
+            </div>
         </div>
     );
 };

@@ -228,6 +228,7 @@ const respondToMessage = async (
             }
 
             if (requestsForPeer.has(auth.publicKeyString)) {
+                // TODO: don't close socket for this
                 ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Peer request already made to that peer');
                 return;
             }

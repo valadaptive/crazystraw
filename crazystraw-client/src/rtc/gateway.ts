@@ -9,24 +9,88 @@ import {
 import Identity from './identity';
 import generateID from '../util/id';
 
-export class ConnectionManager extends EventTarget {
-    private ws: WebSocket;
+export const enum GatewayConnectionStateType {
+    CONNECTING,
+    AUTHENTICATING,
+    CONNECTED,
+    CLOSED
+}
 
+export type GatewayConnectionState = {
+    type: GatewayConnectionStateType.CONNECTING |
+    GatewayConnectionStateType.AUTHENTICATING |
+    GatewayConnectionStateType.CONNECTED
+} | {
+    type: GatewayConnectionStateType.CLOSED,
+    code: number,
+    reason: string
+};
+
+export class GatewayConnectionStateChangeEvent extends Event {
+    state: GatewayConnectionState;
+    constructor (state: GatewayConnectionState) {
+        super('statechange');
+        this.state = state;
+    }
+}
+
+export class GatewayConnection extends EventTarget {
+    private ws: WebSocket;
     private seq: number;
 
-    public closed: boolean;
+    public state: GatewayConnectionState;
 
-    private constructor (serverURL: string) {
+    constructor (serverURL: string, identity: Identity) {
         super();
         this.ws = new WebSocket(serverURL);
         this.seq = 0;
-        this.closed = false;
+        this.state = {type: GatewayConnectionStateType.CONNECTING};
 
-        const onClose = (): void => {
-            this.closed = true;
+        const onClose = (event: CloseEvent): void => {
+            this.dispatchEvent(new GatewayConnectionStateChangeEvent({
+                type: GatewayConnectionStateType.CLOSED,
+                code: event.code,
+                reason: event.reason
+            }));
             this.ws.removeEventListener('close', onClose);
         };
         this.ws.addEventListener('close', onClose);
+
+        const onOpen = async (): Promise<void> => {
+            this.dispatchEvent(new GatewayConnectionStateChangeEvent({
+                type: GatewayConnectionStateType.AUTHENTICATING}));
+            const identifyMessage = {
+                type: GatewayMessageType.IDENTIFY,
+                publicKey: fromByteArray(identity.rawPublicKey)
+            } as const;
+            const identifySeq = this.send(identifyMessage).seq;
+            try {
+                const challengeMessage = (await this.waitFor(
+                    message => message.type === GatewayMessageType.CHALLENGE,
+                    5000
+                )) as ChallengeMessage;
+                const challenge = toByteArray(challengeMessage.challenge);
+                const signature = await identity.sign(challenge);
+
+                const responseMessage = {
+                    type: GatewayMessageType.CHALLENGE_RESPONSE,
+                    for: challengeMessage.seq,
+                    response: fromByteArray(new Uint8Array(signature))
+                };
+                this.send(responseMessage);
+                await this.waitFor(
+                    message => message.type === GatewayMessageType.CHALLENGE_SUCCESS &&
+                        message.for === challengeMessage.seq,
+                    5000
+                );
+                this.dispatchEvent(new GatewayConnectionStateChangeEvent({type: GatewayConnectionStateType.CONNECTED}));
+            } catch (err) {
+                // If we time out or there's some other error, close the socket
+                this.ws.close(1002);
+            }
+            this.ws.removeEventListener('open', onOpen);
+        };
+        this.ws.addEventListener('open', onOpen);
     }
 
     waitFor (filter: (message: GatewayMessage) => boolean, timeout: number): Promise<GatewayMessage> {
@@ -54,63 +118,17 @@ export class ConnectionManager extends EventTarget {
     send (message: Omit<GatewayMessage, 'seq'>): GatewayMessage {
         (message as GatewayMessage).seq = this.seq;
         this.seq += 2;
-        console.log(JSON.stringify(message), this.ws);
         this.ws.send(JSON.stringify(message));
         return message as GatewayMessage;
-    }
-
-    static async create (serverURL: string, identity: Identity): Promise<ConnectionManager> {
-        const cm = new ConnectionManager(serverURL);
-        await new Promise((resolve, reject) => {
-            const onOpen = (): void => {
-                removeEventListeners();
-                resolve(cm);
-            };
-            const onError = (): void => {
-                removeEventListeners();
-                reject(new Error('Connection could not be opened'));
-            };
-            const removeEventListeners = (): void => {
-                cm.ws.removeEventListener('open', onOpen);
-                cm.ws.removeEventListener('error', onError);
-            };
-            cm.ws.addEventListener('open', onOpen);
-            cm.ws.addEventListener('error', onError);
-        });
-
-        const identifyMessage = {
-            type: GatewayMessageType.IDENTIFY,
-            publicKey: fromByteArray(identity.rawPublicKey)
-        } as const;
-        const identifySeq = cm.send(identifyMessage).seq;
-        const challengeMessage = (await cm.waitFor(
-            message => message.type === GatewayMessageType.CHALLENGE,
-            5000
-        )) as ChallengeMessage;
-        const challenge = toByteArray(challengeMessage.challenge);
-        const signature = await identity.sign(challenge);
-
-        const responseMessage = {
-            type: GatewayMessageType.CHALLENGE_RESPONSE,
-            for: challengeMessage.seq,
-            response: fromByteArray(new Uint8Array(signature))
-        };
-        cm.send(responseMessage);
-        await cm.waitFor(
-            message => message.type === GatewayMessageType.CHALLENGE_SUCCESS && message.for === challengeMessage.seq,
-            5000
-        );
-
-        return cm;
     }
 
     close (): void {
         this.ws.close();
     }
 
-    createConnection (myIdentity: Identity, peerIdentity: Identity): Connection {
+    createConnection (myIdentity: Identity, peerIdentity: Identity): PeerConnection {
         const id = generateID();
-        return new Connection(id, this.ws, myIdentity, peerIdentity);
+        return new PeerConnection(id, this.ws, myIdentity, peerIdentity);
     }
 }
 
@@ -138,7 +156,7 @@ class ConnectionAcknowledgeEvent extends Event {
     }
 }
 
-class Connection extends EventTarget {
+class PeerConnection extends EventTarget {
     /** Used to abort the fetch request when the connection is cancelled */
     private establishConnectionController: AbortController;
 

@@ -1,9 +1,9 @@
 import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
-import {signal, effect, Signal, batch, computed} from '@preact/signals';
+import {signal, effect, Signal, batch} from '@preact/signals';
 
 import Profile from '../rtc/profile';
-import {ConnectionManager} from '../rtc/gateway';
+import {GatewayConnection, GatewayConnectionState, GatewayConnectionStateChangeEvent} from '../rtc/gateway';
 
 const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
@@ -19,7 +19,11 @@ type AppState = {
     savedProfile: Signal<string | null>,
     profile: Signal<Profile | null>
     profileState: Signal<ProfileState>,
-    connectionManager: Signal<ConnectionManager | null>
+    gatewayConnection: Signal<{
+        connection: GatewayConnection,
+        state: Signal<GatewayConnectionState>,
+        cleanup: () => void
+    } | null>
 };
 
 const CONNECTION_SERVER = 'ws://localhost:9876';
@@ -29,7 +33,7 @@ const createStore = (): AppState => {
         savedProfile: signal(null),
         profile: signal(null),
         profileState: signal(ProfileState.NONEXISTENT),
-        connectionManager: signal(null)
+        gatewayConnection: signal(null)
     };
 
     const savedProfile = localStorage.getItem('profile');
@@ -50,19 +54,29 @@ const createStore = (): AppState => {
         }
     });
 
-    // Close the old connection manager when the profile changes or is deleted
+    // Close the old connection when the profile changes or is deleted
     effect(() => {
-        const prevConnectionManager = store.connectionManager.peek();
+        const prevGatewayConnection = store.gatewayConnection.peek();
         if (store.profile.value) {
-            if (prevConnectionManager) prevConnectionManager.close();
-            void ConnectionManager.create(
-                CONNECTION_SERVER,
-                store.profile.value.identity
-            ).then((cm): void => {
-                store.connectionManager.value = cm;
-            });
-        } else {
-            if (prevConnectionManager) prevConnectionManager.close();
+            if (prevGatewayConnection) prevGatewayConnection.cleanup();
+            const newConnection = new GatewayConnection(CONNECTION_SERVER, store.profile.value.identity);
+            const stateSignal = signal(newConnection.state);
+            const onStateChange = (event: GatewayConnectionStateChangeEvent): void => {
+                stateSignal.value = event.state;
+            };
+            newConnection.addEventListener('statechange', onStateChange as EventListener);
+            const cleanup = (): void => {
+                newConnection.close();
+                newConnection.removeEventListener('statechange', onStateChange as EventListener);
+            };
+            store.gatewayConnection.value = {
+                connection: newConnection,
+                state: stateSignal,
+                cleanup
+            };
+        } else if (prevGatewayConnection) {
+            prevGatewayConnection.cleanup();
+            store.gatewayConnection.value = null;
         }
     });
 

@@ -1,0 +1,2 @@
+- Contacts list / connection establishing state
+- The entire chat part
