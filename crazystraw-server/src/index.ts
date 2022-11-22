@@ -30,18 +30,30 @@ const config = {
 };
 
 const CHALLENGE_TIMEOUT = 5 * 1000;
-const REQUEST_PEER_TIMEOUT = Date.now() + (60 * 1000);
+const REQUEST_PEER_TIMEOUT = 60 * 1000;
 
 /**
  * Wraps a WebSocket with gateway-specific message sending.
  */
-class WrappedSocket {
+class WrappedSocket extends EventEmitter {
     private seq: number;
     public socket: WebSocket;
 
     constructor (ws: WebSocket) {
+        super();
         this.socket = ws;
         this.seq = 1;
+
+        ws.addEventListener('message', evt => {
+            // TODO: terminate connection if unparseable
+            try {
+                if (typeof evt.data !== 'string') return;
+                const parsedData = JSON.parse(evt.data) as GatewayMessage;
+                this.emit('message', parsedData);
+            } catch (err) {
+                // swallow errors
+            }
+        });
     }
 
     send (message: Omit<GatewayMessage, 'seq'>): Promise<number> {
@@ -77,20 +89,45 @@ class PeerRequest extends EventEmitter {
     };
     timeout: number;
     private timeoutTimer: NodeJS.Timeout;
+    gotPeerRequestMessages: {
+        socket: WrappedSocket
+        origSeq: number
+    }[];
 
     constructor (forSeq: number, offer: PeerRequest['offer'], timeout: number) {
         super();
         this.for = forSeq;
         this.offer = offer;
         this.timeout = timeout;
+        console.log(timeout, Date.now());
         this.timeoutTimer = setTimeout(() => {
             this.emit('timeout');
+            for (const {socket, origSeq} of this.gotPeerRequestMessages) {
+                const timeoutMessage = {
+                    type: GatewayMessageType.GOT_PEER_REQUEST_TIMED_OUT,
+                    for: origSeq
+                };
+                void socket.send(timeoutMessage);
+            }
         }, timeout - Date.now());
+        this.gotPeerRequestMessages = [];
     }
 
     clearTimeout (): void {
         clearTimeout(this.timeoutTimer);
-        this.removeAllListeners('timeout');
+    }
+
+    async cancel (): Promise<void> {
+        this.clearTimeout();
+        const promises = [];
+        for (const {socket, origSeq} of this.gotPeerRequestMessages) {
+            const timeoutMessage = {
+                type: GatewayMessageType.GOT_PEER_REQUEST_CANCELLED,
+                for: origSeq
+            };
+            promises.push(socket.send(timeoutMessage));
+        }
+        await Promise.all(promises);
     }
 }
 
@@ -104,10 +141,7 @@ class Gateway {
     /** Stores connections by their public keys */
     private connectionsByIdentity: Map<string, WrappedSocket>;
 
-    /**
-     * Maps requested peers' public keys to maps of source peers' keys to SDP offers
-     * TODO: abstract into multi-key map
-     */
+    /** Maps requested peers' public keys to maps of source peers' keys to SDP offers */
     private openPeerRequests: MultiKeyMap<[string, string], PeerRequest>;
 
     constructor (port: number) {
@@ -120,15 +154,8 @@ class Gateway {
 
         server.on('connection', ws => {
             const wrappedSocket = new WrappedSocket(ws);
-            ws.addEventListener('message', evt => {
-                try {
-                    if (typeof evt.data !== 'string') return;
-                    const parsedData = JSON.parse(evt.data) as GatewayMessage;
-                    void this.respondToMessage(parsedData, wrappedSocket);
-                } catch (err) {
-                    // swallow errors
-                    // TODO: terminate connection if unparseable
-                }
+            wrappedSocket.on('message', message => {
+                void this.respondToMessage(message as GatewayMessage, wrappedSocket);
             });
             console.log('Connection!');
             //console.log(ws);
@@ -139,7 +166,7 @@ class Gateway {
         peerRequest: PeerRequest,
         publicKey: string,
         peerConnection: WrappedSocket
-    ): Promise<void> {
+    ): Promise<number> {
         const request = {
             type: GatewayMessageType.GOT_PEER_REQUEST,
             peerIdentity: publicKey,
@@ -149,13 +176,12 @@ class Gateway {
         const requestSeq = await peerConnection.send(request);
 
         // TODO: race condition - the peer request could've timed out while we were sending the request
-        peerRequest.once('timeout', () => {
-            const timeoutMessage = {
-                type: GatewayMessageType.GOT_PEER_REQUEST_CANCEL,
-                for: requestSeq
-            };
-            void peerConnection.send(timeoutMessage);
+        peerRequest.gotPeerRequestMessages.push({
+            socket: peerConnection,
+            origSeq: requestSeq
         });
+
+        return requestSeq;
     }
 
     async respondToMessage (
@@ -286,12 +312,6 @@ class Gateway {
                 const peerRequest = new PeerRequest(message.seq, message.offer, Date.now() + REQUEST_PEER_TIMEOUT);
                 peerRequest.once('timeout', () => {
                     this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
-
-                    const timeoutMessage = {
-                        type: GatewayMessageType.PEER_REQUEST_TIMED_OUT,
-                        for: message.seq
-                    } as const;
-                    void ws.send(timeoutMessage);
                 });
 
                 const resp = {
@@ -322,7 +342,7 @@ class Gateway {
                 }
 
                 const request = this.openPeerRequests.get(message.peerIdentity, auth.publicKeyString);
-                if (request) request.clearTimeout();
+                if (request) void request.cancel();
                 this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
                 break;
             }

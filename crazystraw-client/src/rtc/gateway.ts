@@ -97,7 +97,8 @@ GatewayConnectionMessageEvent
                         peerIdentity,
                         message.peerIdentity,
                         message.offer,
-                        message.timeout
+                        message.timeout,
+                        message.seq
                     )));
                 }
             } catch (err) {
@@ -234,12 +235,12 @@ OutgoingPeerRequestAcknowledgeEvent
 
     private async connect (): Promise<void> {
         try {
-            const channel = this.connection.createDataChannel('send_chan');
+            // const channel = this.connection.createDataChannel('send_chan');
             const offer = await this.connection.createOffer();
 
             const requestBody = {
                 type: GatewayMessageType.REQUEST_PEER,
-                peerIdentity: this.peerIdentity,
+                peerIdentity: this.peerIdentity.toBase64(),
                 offer
             } as const;
 
@@ -277,6 +278,7 @@ OutgoingPeerRequestAcknowledgeEvent
 
         }
         catch (error) {
+            console.warn(error);
             this.dispatchEvent(new OutgoingPeerRequestAbortEvent());
         }
     }
@@ -291,7 +293,28 @@ OutgoingPeerRequestAcknowledgeEvent
     }
 }
 
-export class IncomingPeerRequest extends TypedEventTarget<never> {
+export const enum IncomingPeerRequestState {
+    /** The peer request is currently active and waiting for us to respond. */
+    ACTIVE,
+    /** We have accepted the peer request and are waiting for WebRTC. */
+    ACCEPTED,
+    /** We have connected with this peer over WebRTC. */
+    COMPLETE,
+    /** We have rejected the peer request. */
+    REJECTED,
+    /** The peer cancelled the request. */
+    CANCELLED,
+    /** The request timed out on the server. */
+    TIMED_OUT
+}
+
+class IncomingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
+    constructor () {
+        super('statechange');
+    }
+}
+
+export class IncomingPeerRequest extends TypedEventTarget<IncomingPeerRequestStateChangeEvent> {
     gateway: GatewayConnection;
     peerIdentity: Identity;
     peerIdentityString: string;
@@ -300,13 +323,16 @@ export class IncomingPeerRequest extends TypedEventTarget<never> {
         sdp: string
     };
     timeout: number;
+    seq: number;
+    state: IncomingPeerRequestState;
 
     constructor (
         gateway: GatewayConnection,
         peerIdentity: Identity,
         peerIdentityString: string,
         offer: IncomingPeerRequest['offer'],
-        timeout: number
+        timeout: number,
+        seq: number
     ) {
         super();
         this.gateway = gateway;
@@ -314,5 +340,23 @@ export class IncomingPeerRequest extends TypedEventTarget<never> {
         this.peerIdentityString = peerIdentityString;
         this.offer = offer;
         this.timeout = timeout;
+        this.seq = seq;
+        this.state = IncomingPeerRequestState.ACTIVE;
+
+        const onMessage = ({message}: GatewayConnectionMessageEvent): void => {
+            if (messageTypeIs(GatewayMessageType.GOT_PEER_REQUEST_CANCELLED, message) && message.for === seq) {
+                this.state = IncomingPeerRequestState.CANCELLED;
+                this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
+                return;
+            }
+
+            if (messageTypeIs(GatewayMessageType.GOT_PEER_REQUEST_TIMED_OUT, message) && message.for === seq) {
+                this.state = IncomingPeerRequestState.TIMED_OUT;
+                this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
+                return;
+            }
+        };
+
+        this.gateway.addEventListener('message', onMessage);
     }
 }

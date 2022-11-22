@@ -1,20 +1,17 @@
 import {toByteArray, fromByteArray} from 'base64-js';
 
-import {Identity, PersonalIdentity} from './identity';
+import {PersonalIdentity} from './identity';
 
 class Profile {
-    public identity: Identity;
     public handle: string;
     public avatar: Blob | null;
     public bio: string | null;
 
     constructor (
-        identity: Identity,
         handle: string,
         avatar: Blob | null,
         bio: string | null
     ) {
-        this.identity = identity;
         this.handle = handle;
         this.avatar = avatar;
         this.bio = bio;
@@ -30,7 +27,7 @@ class PersonalProfile extends Profile {
         avatar: Blob | null,
         bio: string | null
     ) {
-        super(identity, handle, avatar, bio);
+        super(handle, avatar, bio);
         this.identity = identity;
     }
 

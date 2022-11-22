@@ -36,6 +36,10 @@ class Identity {
         return new Identity(publicKey, rawKey, new Uint8Array(fingerprint));
     }
 
+    toBase64 (): string {
+        return fromByteArray(this.rawPublicKey);
+    }
+
     toJSON (): never {
         throw new Error('Cannot convert Identity to JSON.');
     }

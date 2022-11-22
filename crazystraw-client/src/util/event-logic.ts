@@ -1,4 +1,4 @@
-import {signal, effect, Signal, batch} from '@preact/signals';
+import {signal, effect} from '@preact/signals';
 
 import {AppState} from './state';
 
@@ -41,11 +41,16 @@ const setupEventLogic = (store: AppState): () => void => {
         connection.addEventListener('peerrequest', event => {
             const {request} = event;
             const oldIncomingRequests = store.incomingRequests.value;
-            store.incomingRequests.value = {...oldIncomingRequests, [request.peerIdentityString]: request};
+            const requestStateSignal = signal(request.state);
+            store.incomingRequests.value = {
+                ...oldIncomingRequests,
+                [request.peerIdentityString]: {
+                    request,
+                    state: requestStateSignal
+                }};
 
-            request.addEventListener('abort', () => {
-                const {[request.peerIdentityString]: __, ...otherRequests} = store.incomingRequests.value;
-                store.incomingRequests.value = otherRequests;
+            request.addEventListener('statechange', () => {
+                requestStateSignal.value = request.state;
             });
         });
     }));

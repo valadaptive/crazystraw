@@ -12,8 +12,11 @@ import createProfileAction from '../../actions/create-profile';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
+import {OutgoingPeerRequest} from '../../rtc/gateway';
+import {Identity} from '../../rtc/identity';
+
 const App = (): JSX.Element => {
-    const {profile, savedProfile, profileState} = useAppState();
+    const {profile, savedProfile, profileState, gatewayConnection} = useAppState();
     const createProfile = useAction(createProfileAction);
 
     const prompt = useComputed(() => {
@@ -28,10 +31,33 @@ const App = (): JSX.Element => {
         }
     }).value;
 
+    const [peerIdentityString, setPeerIdentityString] = useState('');
+
+    const gateway = gatewayConnection.value?.connection;
+    const connect = async (): Promise<void> => {
+        if (!gateway) return;
+        const peerIdentity = await Identity.fromPublicKeyString(peerIdentityString);
+        console.log(peerIdentity);
+        new OutgoingPeerRequest(gateway, peerIdentity);
+    };
+
+    console.log(profile.value?.identity.toBase64());
+
+    const peerPrompt = useMemo(() => (
+        <div>
+            <label>Peer identity (base64):</label>
+            <input type="text" value={peerIdentityString} onInput={(event): void => {
+                setPeerIdentityString((event.target as HTMLInputElement).value);
+            }} />
+            <button onClick={connect}>Connect</button>
+        </div>
+    ), [peerIdentityString, setPeerIdentityString, connect]);
+
     return (
         <div className={style.app}>
             <TopBar />
             {prompt}
+            {peerPrompt}
         </div>
     );
 

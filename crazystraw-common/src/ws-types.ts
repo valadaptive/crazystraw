@@ -34,8 +34,10 @@ export const enum GatewayMessageType {
      * Pushed whenever another client makes a peer request to you, or in response to GET_ALL_REQUESTS.
      */
     GOT_PEER_REQUEST,
-    /** Sent to cancel a previous GOT_PEER_REQUEST message. */
-    GOT_PEER_REQUEST_CANCEL,
+    /** Sent to inform the receiver of a GOT_PEER_REQUEST message that the request was cancelled. */
+    GOT_PEER_REQUEST_CANCELLED,
+    /** Sent to inform the receiver of a GOT_PEER_REQUEST message that the request timed out. */
+    GOT_PEER_REQUEST_TIMED_OUT,
     /** Sent from the client to respond to a peer request. */
     PEER_RESPONSE,
     /** Sent from the client to reject a peer request. */
@@ -165,8 +167,14 @@ export type GotPeerRequestMessage = GatewayMessageBase & {
     timeout: number
 };
 
-export type GotPeerRequestCancelMessage = GatewayMessageBase & {
-    type: GatewayMessageType.GOT_PEER_REQUEST_CANCEL,
+export type GotPeerRequestCancelledMessage = GatewayMessageBase & {
+    type: GatewayMessageType.GOT_PEER_REQUEST_CANCELLED,
+    /** Sequence number of the original GOT_PEER_REQUEST message. */
+    for: number
+};
+
+export type GotPeerRequestTimedOutMessage = GatewayMessageBase & {
+    type: GatewayMessageType.GOT_PEER_REQUEST_TIMED_OUT,
     /** Sequence number of the original GOT_PEER_REQUEST message. */
     for: number
 };
@@ -201,6 +209,7 @@ PeerRequestTimedOutMessage |
 PeerRequestRejectedMessage |
 GetAllRequestsMessage |
 GotPeerRequestMessage |
-GotPeerRequestCancelMessage |
+GotPeerRequestCancelledMessage |
+GotPeerRequestTimedOutMessage |
 PeerResponseMessage |
 PeerRejectMessage;
