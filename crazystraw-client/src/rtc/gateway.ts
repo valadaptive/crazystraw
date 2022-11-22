@@ -4,7 +4,8 @@ import {
     GatewayMessage,
     GatewayMessageType,
     GatewayCloseCode,
-    ChallengeMessage
+    ChallengeMessage,
+    ChallengeSuccessMessage
 } from 'crazystraw-common/ws-types';
 
 import Identity from './identity';
@@ -114,12 +115,12 @@ GatewayConnectionMessageEvent
                 type: GatewayMessageType.IDENTIFY,
                 publicKey: fromByteArray(identity.rawPublicKey)
             } as const;
-            const identifySeq = this.send(identifyMessage).seq;
+            const identifySeq = this.send(identifyMessage);
             try {
                 const challengeMessage = (await this.waitFor(
-                    message => message.type === GatewayMessageType.CHALLENGE,
+                    (message): message is ChallengeMessage => message.type === GatewayMessageType.CHALLENGE,
                     5000
-                )) as ChallengeMessage;
+                ));
                 const challenge = toByteArray(challengeMessage.challenge);
                 const signature = await identity.sign(challenge);
 
@@ -130,7 +131,8 @@ GatewayConnectionMessageEvent
                 };
                 this.send(responseMessage);
                 await this.waitFor(
-                    message => message.type === GatewayMessageType.CHALLENGE_SUCCESS &&
+                    (message): message is ChallengeSuccessMessage =>
+                        message.type === GatewayMessageType.CHALLENGE_SUCCESS &&
                         message.for === challengeMessage.seq,
                     5000
                 );
@@ -144,7 +146,7 @@ GatewayConnectionMessageEvent
         this.ws.addEventListener('open', onOpen);
     }
 
-    waitFor (filter: (message: GatewayMessage) => boolean, timeout: number): Promise<GatewayMessage> {
+    waitFor<T extends GatewayMessage> (filter: (message: GatewayMessage) => message is T, timeout: number): Promise<T> {
         return new Promise((resolve, reject) => {
             const onMessage = (event: GatewayConnectionMessageEvent): void => {
                 if (filter(event.message)) {
@@ -161,11 +163,12 @@ GatewayConnectionMessageEvent
         });
     }
 
-    send (message: Omit<GatewayMessage, 'seq'>): GatewayMessage {
-        (message as GatewayMessage).seq = this.seq;
+    send (message: Omit<GatewayMessage, 'seq'>): number {
+        const msgSeq = this.seq;
+        (message as GatewayMessage).seq = msgSeq;
         this.seq += 2;
         this.ws.send(JSON.stringify(message));
-        return message as GatewayMessage;
+        return msgSeq;
     }
 
     close (): void {
@@ -174,7 +177,7 @@ GatewayConnectionMessageEvent
 
     createConnection (myIdentity: Identity, peerIdentity: Identity): PeerConnection {
         const id = generateID();
-        return new PeerConnection(id, this.ws, myIdentity, peerIdentity);
+        return new PeerConnection(id, this, myIdentity, peerIdentity);
     }
 }
 
@@ -209,12 +212,11 @@ ConnectionAcknowledgeEvent
 > {
     /** Used to abort the fetch request when the connection is cancelled */
     private establishConnectionController: AbortController;
-
     private connection: RTCPeerConnection;
 
     constructor (
         id: string,
-        ws: WebSocket,
+        gateway: GatewayConnection,
         myIdentity: Identity,
         peerIdentity: Identity
     ) {
@@ -223,12 +225,12 @@ ConnectionAcknowledgeEvent
         this.establishConnectionController = new AbortController();
         this.connection = new RTCPeerConnection();
 
-        void this.connect(id, ws, myIdentity, peerIdentity);
+        void this.connect(id, gateway, myIdentity, peerIdentity);
     }
 
     private async connect (
         id: string,
-        ws: WebSocket,
+        gateway: GatewayConnection,
         myIdentity: Identity,
         peerIdentity: Identity
     ): Promise<void> {
@@ -236,38 +238,15 @@ ConnectionAcknowledgeEvent
             const channel = this.connection.createDataChannel('send_chan');
             const offer = await this.connection.createOffer();
 
-            const requestBody = JSON.stringify({
+            const requestBody = {
                 connectionID: id,
                 type: GatewayMessageType.REQUEST_PEER,
                 myIdentity,
                 peerIdentity,
                 offer
-            });
-
-            const onMessage = (evt: MessageEvent): void => {
-                try {
-                    const parsedData = JSON.parse(evt.data as string) as GatewayMessage;
-                    //if (parsedData.connectionID !== id) return;
-                    console.log(parsedData);
-                } catch (err) {
-                    // The message may not have been meant for us. Swallow the error.
-                }
             };
 
-            const onError = (): void => {
-                this.dispatchEvent(new ConnectionErrorEvent(new Error('WebSocket error')));
-                removeEventListeners();
-            };
-
-            const removeEventListeners = (): void => {
-                ws.removeEventListener('message', onMessage);
-                ws.removeEventListener('error', onError);
-            };
-
-            ws.addEventListener('message', onMessage);
-            ws.addEventListener('error', onError);
-
-            ws.send(requestBody);
+            gateway.send(requestBody);
 
         }
         catch (error) {

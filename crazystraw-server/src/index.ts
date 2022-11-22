@@ -62,19 +62,10 @@ type ChallengeState = {
     timeout: NodeJS.Timeout
 };
 
-// Stores connections that are currently in the challenge/response state
-const waitingChallenges = new WeakMap<WrappedSocket, ChallengeState>();
-
 type AuthenticatedConnectionData = {
     publicKey: CryptoKey,
     publicKeyString: string
 };
-
-// Stores connections that are authenticated, and their public keys
-const authenticatedConnections = new WeakMap<WrappedSocket, AuthenticatedConnectionData>();
-
-// Stores connections by their public keys
-const connectionsByIdentity = new Map<string, WrappedSocket>();
 
 type PeerRequest = {
     for: number,
@@ -85,264 +76,286 @@ type PeerRequest = {
     timeout: NodeJS.Timeout
 };
 
-// Maps requested peers' public keys to maps of source peers' keys to SDP offers
-// TODO: abstract into multi-key map
-const openPeerRequests = new Map<string, Map<string, PeerRequest>>();
+class Gateway {
+    /** Stores connections that are currently in the challenge/response state */
+    private waitingChallenges: WeakMap<WrappedSocket, ChallengeState>;
 
-const respondToMessage = async (
-    message: GatewayMessage,
-    ws: WrappedSocket
-): Promise<void> => {
-    switch (message.type) {
-        // The client just connected and is identifying itself.
-        case GatewayMessageType.IDENTIFY: {
-            if (waitingChallenges.has(ws) || authenticatedConnections.has(ws)) {
-                ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Already authenticated');
-                return;
-            }
+    /** Stores connections that are authenticated, and their public keys */
+    private authenticatedConnections: WeakMap<WrappedSocket, AuthenticatedConnectionData>;
 
-            if (connectionsByIdentity.has(message.publicKey)) {
-                ws.socket.close(GatewayCloseCode.EXISTING_SESSION, 'Another session is already active');
-                return;
-            }
+    /** Stores connections by their public keys */
+    private connectionsByIdentity: Map<string, WrappedSocket>;
 
-            // Decode public key from message
-            let publicKey;
-            try {
-                publicKey = await subtle.importKey(
-                    'raw',
-                    Buffer.from(message.publicKey, 'base64'),
-                    {name: 'ECDSA', namedCurve: 'P-256'},
-                    true,
-                    ['verify']
-                );
-            } catch (err) {
-                ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid public key format');
-                return;
-            }
+    /**
+     * Maps requested peers' public keys to maps of source peers' keys to SDP offers
+     * TODO: abstract into multi-key map
+     */
+    private openPeerRequests: Map<string, Map<string, PeerRequest>>;
 
-            // Issue a challenge to the client to make sure they actually own the corresponding private key
-            const challenge = randomBytes(16);
-            const ret = {
-                type: GatewayMessageType.CHALLENGE,
-                for: message.seq,
-                challenge: challenge.toString('base64')
-            };
+    constructor (port: number) {
+        this.waitingChallenges = new WeakMap();
+        this.authenticatedConnections = new WeakMap();
+        this.connectionsByIdentity = new Map();
+        this.openPeerRequests = new Map();
 
-            // Store challenge info for when the client sends a response
-            const challengeSeq = await ws.send(ret);
-            waitingChallenges.set(ws, {
-                publicKey,
-                publicKeyString: message.publicKey,
-                challenge,
-                for: challengeSeq,
-                timeout: setTimeout(() => {
-                    waitingChallenges.delete(ws);
-                    ws.socket.close(GatewayCloseCode.CHALLENGE_TIMEOUT, 'Challenge timed out');
-                }, CHALLENGE_TIMEOUT)
-            });
-            return;
-        }
-        // The client is responding to a challenge we sent them by signing it with their private key
-        case GatewayMessageType.CHALLENGE_RESPONSE: {
-            const waitingChallenge = waitingChallenges.get(ws);
-            if (!waitingChallenge) {
-                ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Challenge does not exist');
-                return;
-            }
+        const server = new WebSocketServer({port});
 
-            clearTimeout(waitingChallenge.timeout);
-
-            if (waitingChallenge.for !== message.for) {
-                ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Incorrect challenge response sequence number');
-                return;
-            }
-
-            const responseSignature = Buffer.from(message.response, 'base64');
-
-            try {
-                // Verify the signature using the client's public key they gave us
-                const isValid = await subtle.verify(
-                    {name: 'ECDSA', hash: 'SHA-256'},
-                    waitingChallenge.publicKey,
-                    responseSignature,
-                    waitingChallenge.challenge
-                );
-
-                if (isValid) {
-                    authenticatedConnections.set(ws, {
-                        publicKey: waitingChallenge.publicKey,
-                        publicKeyString: waitingChallenge.publicKeyString
-                    });
-                    connectionsByIdentity.set(waitingChallenge.publicKeyString, ws);
-                    ws.socket.once('close', () => {
-                        authenticatedConnections.delete(ws);
-                        connectionsByIdentity.delete(waitingChallenge.publicKeyString);
-                    });
-
-                    const resp = {
-                        type: GatewayMessageType.CHALLENGE_SUCCESS,
-                        for: waitingChallenge.for
-                    };
-
-                    await ws.send(resp);
-                } else {
-                    ws.socket.close(GatewayCloseCode.CHALLENGE_FAILED, 'Challenge failed');
+        server.on('connection', ws => {
+            const wrappedSocket = new WrappedSocket(ws);
+            ws.addEventListener('message', evt => {
+                try {
+                    if (typeof evt.data !== 'string') return;
+                    const parsedData = JSON.parse(evt.data) as GatewayMessage;
+                    void this.respondToMessage(parsedData, wrappedSocket);
+                } catch (err) {
+                    // swallow errors
+                    // TODO: terminate connection if unparseable
                 }
-                return;
-            } catch (err) {
-                console.error(err);
-                ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format');
-            }
-            waitingChallenges.delete(ws);
-
-            break;
-        }
-        // The client is requesting a peer
-        case GatewayMessageType.REQUEST_PEER: {
-            const auth = authenticatedConnections.get(ws);
-            if (!auth) {
-                ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
-                return;
-            }
-            const resp = {
-                type: GatewayMessageType.REQUEST_PEER_ACK,
-                timeout: Date.now() + REQUEST_PEER_TIMEOUT
-            };
-
-            const timeout = setTimeout(() => {
-                const requestsForPeer = openPeerRequests.get(message.peerIdentity);
-                if (requestsForPeer) requestsForPeer.delete(auth.publicKeyString);
-
-                const timeoutMessage = {
-                    type: GatewayMessageType.REQUEST_PEER_TIMEOUT,
-                    for: message.seq
-                };
-                void ws.send(timeoutMessage);
-            }, REQUEST_PEER_TIMEOUT);
-
-            let requestsForPeer = openPeerRequests.get(message.peerIdentity);
-            if (!requestsForPeer) {
-                requestsForPeer = new Map();
-                openPeerRequests.set(message.peerIdentity, requestsForPeer);
-            }
-
-            if (requestsForPeer.has(auth.publicKeyString)) {
-                // TODO: don't close socket for this
-                ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Peer request already made to that peer');
-                return;
-            }
-
-            requestsForPeer.set(auth.publicKeyString, {
-                for: message.seq,
-                offer: message.offer,
-                timeout
             });
+            console.log('Connection!');
+            //console.log(ws);
+        });
+    }
 
-            await ws.send(resp);
+    async respondToMessage (
+        message: GatewayMessage,
+        ws: WrappedSocket
+    ): Promise<void> {
+        switch (message.type) {
+            // The client just connected and is identifying itself.
+            case GatewayMessageType.IDENTIFY: {
+                if (this.waitingChallenges.has(ws) || this.authenticatedConnections.has(ws)) {
+                    ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Already authenticated');
+                    return;
+                }
 
-            const peerConnection = connectionsByIdentity.get(message.peerIdentity);
-            if (peerConnection) {
-                //TODO: add a GOT_PEER_REQUEST_ACK so the user has more time to accept/reject request
-                const request = {
-                    type: GatewayMessageType.GOT_PEER_REQUEST,
-                    peerIdentity: auth.publicKeyString,
-                    offer: message.offer
+                if (this.connectionsByIdentity.has(message.publicKey)) {
+                    ws.socket.close(GatewayCloseCode.EXISTING_SESSION, 'Another session is already active');
+                    return;
+                }
+
+                // Decode public key from message
+                let publicKey;
+                try {
+                    publicKey = await subtle.importKey(
+                        'raw',
+                        Buffer.from(message.publicKey, 'base64'),
+                        {name: 'ECDSA', namedCurve: 'P-256'},
+                        true,
+                        ['verify']
+                    );
+                } catch (err) {
+                    ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid public key format');
+                    return;
+                }
+
+                // Issue a challenge to the client to make sure they actually own the corresponding private key
+                const challenge = randomBytes(16);
+                const ret = {
+                    type: GatewayMessageType.CHALLENGE,
+                    for: message.seq,
+                    challenge: challenge.toString('base64')
                 };
-                await peerConnection.send(request);
-            }
 
-            break;
-        }
-        // The client is cancelling a peer request
-        case GatewayMessageType.REQUEST_PEER_CANCEL: {
-            const auth = authenticatedConnections.get(ws);
-            if (!auth) {
-                ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                // Store challenge info for when the client sends a response
+                const challengeSeq = await ws.send(ret);
+                this.waitingChallenges.set(ws, {
+                    publicKey,
+                    publicKeyString: message.publicKey,
+                    challenge,
+                    for: challengeSeq,
+                    timeout: setTimeout(() => {
+                        this.waitingChallenges.delete(ws);
+                        ws.socket.close(GatewayCloseCode.CHALLENGE_TIMEOUT, 'Challenge timed out');
+                    }, CHALLENGE_TIMEOUT)
+                });
                 return;
             }
+            // The client is responding to a challenge we sent them by signing it with their private key
+            case GatewayMessageType.CHALLENGE_RESPONSE: {
+                const waitingChallenge = this.waitingChallenges.get(ws);
+                if (!waitingChallenge) {
+                    ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Challenge does not exist');
+                    return;
+                }
 
-            const requestsForPeer = openPeerRequests.get(message.peerIdentity);
-            if (requestsForPeer) {
-                const request = requestsForPeer.get(auth.publicKeyString);
-                if (request) clearTimeout(request.timeout);
-                requestsForPeer.delete(auth.publicKeyString);
+                clearTimeout(waitingChallenge.timeout);
+
+                if (waitingChallenge.for !== message.for) {
+                    ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Incorrect challenge response sequence number');
+                    return;
+                }
+
+                const responseSignature = Buffer.from(message.response, 'base64');
+
+                try {
+                    // Verify the signature using the client's public key they gave us
+                    const isValid = await subtle.verify(
+                        {name: 'ECDSA', hash: 'SHA-256'},
+                        waitingChallenge.publicKey,
+                        responseSignature,
+                        waitingChallenge.challenge
+                    );
+
+                    if (isValid) {
+                        this.authenticatedConnections.set(ws, {
+                            publicKey: waitingChallenge.publicKey,
+                            publicKeyString: waitingChallenge.publicKeyString
+                        });
+                        this.connectionsByIdentity.set(waitingChallenge.publicKeyString, ws);
+                        ws.socket.once('close', () => {
+                            this.authenticatedConnections.delete(ws);
+                            this.connectionsByIdentity.delete(waitingChallenge.publicKeyString);
+                        });
+
+                        const resp = {
+                            type: GatewayMessageType.CHALLENGE_SUCCESS,
+                            for: waitingChallenge.for
+                        };
+
+                        await ws.send(resp);
+                    } else {
+                        ws.socket.close(GatewayCloseCode.CHALLENGE_FAILED, 'Challenge failed');
+                    }
+                    return;
+                } catch (err) {
+                    console.error(err);
+                    ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format');
+                }
+                this.waitingChallenges.delete(ws);
+
+                break;
             }
-            break;
-        }
-        case GatewayMessageType.GET_ALL_REQUESTS: {
-            const auth = authenticatedConnections.get(ws);
-            if (!auth) {
-                ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
-                return;
-            }
-
-            const requestsForMe = openPeerRequests.get(auth.publicKeyString);
-            if (!requestsForMe) return;
-
-            for (const [key, request] of requestsForMe) {
-                const message = {
-                    type: GatewayMessageType.GOT_PEER_REQUEST,
-                    peerIdentity: key,
-                    offer: request.offer
+            // The client is requesting a peer
+            case GatewayMessageType.REQUEST_PEER: {
+                const auth = this.authenticatedConnections.get(ws);
+                if (!auth) {
+                    ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                    return;
+                }
+                const resp = {
+                    type: GatewayMessageType.REQUEST_PEER_ACK,
+                    timeout: Date.now() + REQUEST_PEER_TIMEOUT
                 };
-                await ws.send(message);
+
+                const timeout = setTimeout(() => {
+                    const requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
+                    if (requestsForPeer) requestsForPeer.delete(auth.publicKeyString);
+
+                    const timeoutMessage = {
+                        type: GatewayMessageType.REQUEST_PEER_TIMEOUT,
+                        for: message.seq
+                    };
+                    void ws.send(timeoutMessage);
+                }, REQUEST_PEER_TIMEOUT);
+
+                let requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
+                if (!requestsForPeer) {
+                    requestsForPeer = new Map();
+                    this.openPeerRequests.set(message.peerIdentity, requestsForPeer);
+                }
+
+                if (requestsForPeer.has(auth.publicKeyString)) {
+                    // TODO: don't close socket for this
+                    ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Peer request already made to that peer');
+                    return;
+                }
+
+                requestsForPeer.set(auth.publicKeyString, {
+                    for: message.seq,
+                    offer: message.offer,
+                    timeout
+                });
+
+                await ws.send(resp);
+
+                const peerConnection = this.connectionsByIdentity.get(message.peerIdentity);
+                if (peerConnection) {
+                    //TODO: add a GOT_PEER_REQUEST_ACK so the user has more time to accept/reject request
+                    const request = {
+                        type: GatewayMessageType.GOT_PEER_REQUEST,
+                        peerIdentity: auth.publicKeyString,
+                        offer: message.offer
+                    };
+                    await peerConnection.send(request);
+                }
+
+                break;
             }
-            break;
-        }
-        // The client is responding to a peer request
-        case GatewayMessageType.PEER_RESPONSE: {
-            // TODO: handle failure cases!!!
-            const auth = authenticatedConnections.get(ws);
-            if (!auth) {
-                ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
-                return;
+            // The client is cancelling a peer request
+            case GatewayMessageType.REQUEST_PEER_CANCEL: {
+                const auth = this.authenticatedConnections.get(ws);
+                if (!auth) {
+                    ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                    return;
+                }
+
+                const requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
+                if (requestsForPeer) {
+                    const request = requestsForPeer.get(auth.publicKeyString);
+                    if (request) clearTimeout(request.timeout);
+                    requestsForPeer.delete(auth.publicKeyString);
+                }
+                break;
             }
+            case GatewayMessageType.GET_ALL_REQUESTS: {
+                const auth = this.authenticatedConnections.get(ws);
+                if (!auth) {
+                    ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                    return;
+                }
 
-            const requestsForMe = openPeerRequests.get(auth.publicKeyString);
-            // Either timed out or was cancelled
-            // TODO: signal that the response is no longer valid
-            if (!requestsForMe) return;
+                const requestsForMe = this.openPeerRequests.get(auth.publicKeyString);
+                if (!requestsForMe) return;
 
-            const requestFromPeer = requestsForMe.get(message.peerIdentity);
-            // Either timed out or was cancelled
-            if (!requestFromPeer) return;
+                for (const [key, request] of requestsForMe) {
+                    const message = {
+                        type: GatewayMessageType.GOT_PEER_REQUEST,
+                        peerIdentity: key,
+                        offer: request.offer
+                    };
+                    await ws.send(message);
+                }
+                break;
+            }
+            // The client is responding to a peer request
+            case GatewayMessageType.PEER_RESPONSE: {
+                // TODO: handle failure cases!!!
+                const auth = this.authenticatedConnections.get(ws);
+                if (!auth) {
+                    ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                    return;
+                }
 
-            const connection = connectionsByIdentity.get(message.peerIdentity);
-            // Client disconnected
-            if (!connection) return;
+                const requestsForMe = this.openPeerRequests.get(auth.publicKeyString);
+                // Either timed out or was cancelled
+                // TODO: signal that the response is no longer valid
+                if (!requestsForMe) return;
 
-            const answer = {
-                type: GatewayMessageType.PEER_ANSWER,
-                for: requestFromPeer.for,
-                answer: message.answer
-            };
-            await connection.send(answer);
+                const requestFromPeer = requestsForMe.get(message.peerIdentity);
+                // Either timed out or was cancelled
+                if (!requestFromPeer) return;
 
-            break;
-        }
-        default: {
-            throw new Error('Unknown message type');
+                const connection = this.connectionsByIdentity.get(message.peerIdentity);
+                // Client disconnected
+                if (!connection) return;
+
+                const answer = {
+                    type: GatewayMessageType.PEER_ANSWER,
+                    for: requestFromPeer.for,
+                    answer: message.answer
+                };
+                await connection.send(answer);
+
+                break;
+            }
+            default: {
+                throw new Error('Unknown message type');
+            }
         }
     }
-};
+}
 
-const server = new WebSocketServer({port: config.port});
-
-server.on('connection', ws => {
-    const wrappedSocket = new WrappedSocket(ws);
-    ws.addEventListener('message', evt => {
-        try {
-            if (typeof evt.data !== 'string') return;
-            const parsedData = JSON.parse(evt.data) as GatewayMessage;
-            void respondToMessage(parsedData, wrappedSocket);
-        } catch (err) {
-            // swallow errors
-        }
-        //console.log(evt, evt.data);
-    });
-    console.log('Connection!');
-    //console.log(ws);
-});
+new Gateway(config.port);
 
 console.log(`Server running on port ${config.port}...`);
