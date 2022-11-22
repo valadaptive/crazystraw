@@ -2,13 +2,15 @@ import {WebSocketServer, WebSocket} from 'ws';
 import dotenv from 'dotenv';
 import {randomBytes, subtle} from 'crypto';
 import {setTimeout, clearTimeout} from 'timers';
+import EventEmitter from 'events';
 
 import {
     GatewayMessage,
     GatewayMessageType,
-    ChallengeMessage,
     GatewayCloseCode
 } from 'crazystraw-common/ws-types';
+
+import MultiKeyMap from './util/multi-key-map.js';
 
 dotenv.config();
 
@@ -67,14 +69,30 @@ type AuthenticatedConnectionData = {
     publicKeyString: string
 };
 
-type PeerRequest = {
-    for: number,
+class PeerRequest extends EventEmitter {
+    for: number;
     offer: {
         type: 'offer',
         sdp: string
-    },
-    timeout: NodeJS.Timeout
-};
+    };
+    timeout: number;
+    private timeoutTimer: NodeJS.Timeout;
+
+    constructor (forSeq: number, offer: PeerRequest['offer'], timeout: number) {
+        super();
+        this.for = forSeq;
+        this.offer = offer;
+        this.timeout = timeout;
+        this.timeoutTimer = setTimeout(() => {
+            this.emit('timeout');
+        }, timeout - Date.now());
+    }
+
+    clearTimeout (): void {
+        clearTimeout(this.timeoutTimer);
+        this.removeAllListeners('timeout');
+    }
+}
 
 class Gateway {
     /** Stores connections that are currently in the challenge/response state */
@@ -90,13 +108,13 @@ class Gateway {
      * Maps requested peers' public keys to maps of source peers' keys to SDP offers
      * TODO: abstract into multi-key map
      */
-    private openPeerRequests: Map<string, Map<string, PeerRequest>>;
+    private openPeerRequests: MultiKeyMap<[string, string], PeerRequest>;
 
     constructor (port: number) {
         this.waitingChallenges = new WeakMap();
         this.authenticatedConnections = new WeakMap();
         this.connectionsByIdentity = new Map();
-        this.openPeerRequests = new Map();
+        this.openPeerRequests = new MultiKeyMap();
 
         const server = new WebSocketServer({port});
 
@@ -114,6 +132,29 @@ class Gateway {
             });
             console.log('Connection!');
             //console.log(ws);
+        });
+    }
+
+    private async sendGotPeerRequest (
+        peerRequest: PeerRequest,
+        publicKey: string,
+        peerConnection: WrappedSocket
+    ): Promise<void> {
+        const request = {
+            type: GatewayMessageType.GOT_PEER_REQUEST,
+            peerIdentity: publicKey,
+            offer: peerRequest.offer
+        } as const;
+
+        const requestSeq = await peerConnection.send(request);
+
+        // TODO: race condition - the peer request could've timed out while we were sending the request
+        peerRequest.once('timeout', () => {
+            const timeoutMessage = {
+                type: GatewayMessageType.GOT_PEER_REQUEST_CANCEL,
+                for: requestSeq
+            };
+            void peerConnection.send(timeoutMessage);
         });
     }
 
@@ -155,7 +196,7 @@ class Gateway {
                     type: GatewayMessageType.CHALLENGE,
                     for: message.seq,
                     challenge: challenge.toString('base64')
-                };
+                } as const;
 
                 // Store challenge info for when the client sends a response
                 const challengeSeq = await ws.send(ret);
@@ -171,6 +212,7 @@ class Gateway {
                 });
                 return;
             }
+
             // The client is responding to a challenge we sent them by signing it with their private key
             case GatewayMessageType.CHALLENGE_RESPONSE: {
                 const waitingChallenge = this.waitingChallenges.get(ws);
@@ -211,7 +253,7 @@ class Gateway {
                         const resp = {
                             type: GatewayMessageType.CHALLENGE_SUCCESS,
                             for: waitingChallenge.for
-                        };
+                        } as const;
 
                         await ws.send(resp);
                     } else {
@@ -226,6 +268,7 @@ class Gateway {
 
                 break;
             }
+
             // The client is requesting a peer
             case GatewayMessageType.REQUEST_PEER: {
                 const auth = this.authenticatedConnections.get(ws);
@@ -233,71 +276,57 @@ class Gateway {
                     ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
                     return;
                 }
-                const resp = {
-                    type: GatewayMessageType.REQUEST_PEER_ACK,
-                    timeout: Date.now() + REQUEST_PEER_TIMEOUT
-                };
 
-                const timeout = setTimeout(() => {
-                    const requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
-                    if (requestsForPeer) requestsForPeer.delete(auth.publicKeyString);
-
-                    const timeoutMessage = {
-                        type: GatewayMessageType.REQUEST_PEER_TIMEOUT,
-                        for: message.seq
-                    };
-                    void ws.send(timeoutMessage);
-                }, REQUEST_PEER_TIMEOUT);
-
-                let requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
-                if (!requestsForPeer) {
-                    requestsForPeer = new Map();
-                    this.openPeerRequests.set(message.peerIdentity, requestsForPeer);
-                }
-
-                if (requestsForPeer.has(auth.publicKeyString)) {
+                if (this.openPeerRequests.has(message.peerIdentity, auth.publicKeyString)) {
                     // TODO: don't close socket for this
                     ws.socket.close(GatewayCloseCode.INVALID_STATE, 'Peer request already made to that peer');
                     return;
                 }
 
-                requestsForPeer.set(auth.publicKeyString, {
-                    for: message.seq,
-                    offer: message.offer,
-                    timeout
+                const peerRequest = new PeerRequest(message.seq, message.offer, Date.now() + REQUEST_PEER_TIMEOUT);
+                peerRequest.once('timeout', () => {
+                    this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
+
+                    const timeoutMessage = {
+                        type: GatewayMessageType.PEER_REQUEST_TIMED_OUT,
+                        for: message.seq
+                    } as const;
+                    void ws.send(timeoutMessage);
                 });
+
+                const resp = {
+                    type: GatewayMessageType.PEER_REQUEST_ACK,
+                    for: message.seq,
+                    timeout: peerRequest.timeout
+                } as const;
+
+                this.openPeerRequests.set(peerRequest, message.peerIdentity, auth.publicKeyString);
+
+                const peerConnection = this.connectionsByIdentity.get(message.peerIdentity);
+                // Peer is connected; forward the request immediately
+                if (peerConnection) {
+                    await this.sendGotPeerRequest(peerRequest, auth.publicKeyString, peerConnection);
+                }
 
                 await ws.send(resp);
 
-                const peerConnection = this.connectionsByIdentity.get(message.peerIdentity);
-                if (peerConnection) {
-                    //TODO: add a GOT_PEER_REQUEST_ACK so the user has more time to accept/reject request
-                    const request = {
-                        type: GatewayMessageType.GOT_PEER_REQUEST,
-                        peerIdentity: auth.publicKeyString,
-                        offer: message.offer
-                    };
-                    await peerConnection.send(request);
-                }
-
                 break;
             }
+
             // The client is cancelling a peer request
-            case GatewayMessageType.REQUEST_PEER_CANCEL: {
+            case GatewayMessageType.PEER_REQUEST_CANCEL: {
                 const auth = this.authenticatedConnections.get(ws);
                 if (!auth) {
                     ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
                     return;
                 }
 
-                const requestsForPeer = this.openPeerRequests.get(message.peerIdentity);
-                if (requestsForPeer) {
-                    const request = requestsForPeer.get(auth.publicKeyString);
-                    if (request) clearTimeout(request.timeout);
-                    requestsForPeer.delete(auth.publicKeyString);
-                }
+                const request = this.openPeerRequests.get(message.peerIdentity, auth.publicKeyString);
+                if (request) request.clearTimeout();
+                this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
                 break;
             }
+
             case GatewayMessageType.GET_ALL_REQUESTS: {
                 const auth = this.authenticatedConnections.get(ws);
                 if (!auth) {
@@ -305,19 +334,15 @@ class Gateway {
                     return;
                 }
 
-                const requestsForMe = this.openPeerRequests.get(auth.publicKeyString);
+                const requestsForMe = this.openPeerRequests.submap(auth.publicKeyString);
                 if (!requestsForMe) return;
 
                 for (const [key, request] of requestsForMe) {
-                    const message = {
-                        type: GatewayMessageType.GOT_PEER_REQUEST,
-                        peerIdentity: key,
-                        offer: request.offer
-                    };
-                    await ws.send(message);
+                    await this.sendGotPeerRequest(request, key, ws);
                 }
                 break;
             }
+
             // The client is responding to a peer request
             case GatewayMessageType.PEER_RESPONSE: {
                 // TODO: handle failure cases!!!
@@ -327,14 +352,10 @@ class Gateway {
                     return;
                 }
 
-                const requestsForMe = this.openPeerRequests.get(auth.publicKeyString);
-                // Either timed out or was cancelled
-                // TODO: signal that the response is no longer valid
-                if (!requestsForMe) return;
-
-                const requestFromPeer = requestsForMe.get(message.peerIdentity);
+                const requestFromPeer = this.openPeerRequests.get(auth.publicKeyString, message.peerIdentity);
                 // Either timed out or was cancelled
                 if (!requestFromPeer) return;
+                this.openPeerRequests.delete(auth.publicKeyString, message.peerIdentity);
 
                 const connection = this.connectionsByIdentity.get(message.peerIdentity);
                 // Client disconnected
@@ -344,8 +365,34 @@ class Gateway {
                     type: GatewayMessageType.PEER_ANSWER,
                     for: requestFromPeer.for,
                     answer: message.answer
-                };
+                } as const;
                 await connection.send(answer);
+
+                break;
+            }
+
+            // The client is rejecting a peer request
+            case GatewayMessageType.PEER_REJECT: {
+                const auth = this.authenticatedConnections.get(ws);
+                if (!auth) {
+                    ws.socket.close(GatewayCloseCode.NOT_AUTHENTICATED, 'Not authenticated');
+                    return;
+                }
+
+                const requestFromPeer = this.openPeerRequests.get(auth.publicKeyString, message.peerIdentity);
+                // Either timed out or was cancelled
+                if (!requestFromPeer) return;
+                this.openPeerRequests.delete(auth.publicKeyString, message.peerIdentity);
+
+                const connection = this.connectionsByIdentity.get(message.peerIdentity);
+                // Client disconnected
+                if (!connection) return;
+
+                const rejection = {
+                    type: GatewayMessageType.PEER_REQUEST_REJECTED,
+                    for: requestFromPeer.for
+                } as const;
+                await connection.send(rejection);
 
                 break;
             }

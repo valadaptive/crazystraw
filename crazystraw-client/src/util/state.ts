@@ -4,8 +4,8 @@ import {signal, effect, Signal, batch} from '@preact/signals';
 
 import setupEventLogic from './event-logic';
 
-import Profile from '../rtc/profile';
-import {GatewayConnection, GatewayConnectionState, PeerRequest} from '../rtc/gateway';
+import {PersonalProfile} from '../rtc/profile';
+import {GatewayConnection, GatewayConnectionState, IncomingPeerRequest} from '../rtc/gateway';
 
 export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
@@ -19,14 +19,14 @@ export const enum ProfileState {
  */
 export type AppState = {
     savedProfile: Signal<string | null>,
-    profile: Signal<Profile | null>
+    profile: Signal<PersonalProfile | null>
     profileState: Signal<ProfileState>,
     gatewayConnection: Signal<{
         connection: GatewayConnection,
         state: Signal<GatewayConnectionState>,
         cleanup: () => void
     } | null>,
-    incomingRequests: Signal<Partial<Record<string, PeerRequest>>>
+    incomingRequests: Signal<Partial<Record<string, IncomingPeerRequest>>>
 };
 
 const CONNECTION_SERVER = 'ws://localhost:9876';

@@ -8,8 +8,7 @@ import {
     ChallengeSuccessMessage
 } from 'crazystraw-common/ws-types';
 
-import Identity from './identity';
-import generateID from '../util/id';
+import {Identity, PersonalIdentity} from './identity';
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
 
 export const enum GatewayConnectionStateType {
@@ -37,19 +36,9 @@ export class GatewayConnectionStateChangeEvent extends TypedEvent<'statechange'>
     }
 }
 
-export type PeerRequest = {
-    /** The peer's public key, encoded into base64. */
-    peerIdentity: string,
-    /** SDP offer, for WebRTC. */
-    offer: {
-        type: 'offer',
-        sdp: string
-    }
-};
-
 export class GatewayConnectionPeerRequestEvent extends TypedEvent<'peerrequest'> {
-    request: PeerRequest;
-    constructor (request: PeerRequest) {
+    request: IncomingPeerRequest;
+    constructor (request: IncomingPeerRequest) {
         super('peerrequest');
         this.request = request;
     }
@@ -63,6 +52,11 @@ export class GatewayConnectionMessageEvent extends TypedEvent<'message'> {
     }
 }
 
+const messageTypeIs = <T extends GatewayMessageType>(type: T, message: GatewayMessage):
+message is Extract<GatewayMessage, {type: T}> => {
+    return message.type === type;
+};
+
 export class GatewayConnection extends TypedEventTarget<
 GatewayConnectionStateChangeEvent |
 GatewayConnectionPeerRequestEvent |
@@ -73,7 +67,7 @@ GatewayConnectionMessageEvent
 
     public state: GatewayConnectionState;
 
-    constructor (serverURL: string, identity: Identity) {
+    constructor (serverURL: string, identity: PersonalIdentity) {
         super();
         this.ws = new WebSocket(serverURL);
         this.seq = 0;
@@ -90,17 +84,21 @@ GatewayConnectionMessageEvent
         };
         this.ws.addEventListener('close', onClose);
 
-        const onMessage = (event: MessageEvent): void => {
+        const onMessage = async (event: MessageEvent): Promise<void> => {
             try {
                 const message = JSON.parse(event.data as string) as GatewayMessage;
 
                 this.dispatchEvent(new GatewayConnectionMessageEvent(message));
 
-                if (message.type === GatewayMessageType.GOT_PEER_REQUEST) {
-                    this.dispatchEvent(new GatewayConnectionPeerRequestEvent({
-                        peerIdentity: message.peerIdentity,
-                        offer: message.offer
-                    }));
+                if (messageTypeIs(GatewayMessageType.GOT_PEER_REQUEST, message)) {
+                    const peerIdentity = await Identity.fromPublicKeyString(message.peerIdentity);
+                    this.dispatchEvent(new GatewayConnectionPeerRequestEvent(new IncomingPeerRequest(
+                        this,
+                        peerIdentity,
+                        message.peerIdentity,
+                        message.offer,
+                        message.timeout
+                    )));
                 }
             } catch (err) {
                 this.ws.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid JSON');
@@ -118,7 +116,9 @@ GatewayConnectionMessageEvent
             const identifySeq = this.send(identifyMessage);
             try {
                 const challengeMessage = (await this.waitFor(
-                    (message): message is ChallengeMessage => message.type === GatewayMessageType.CHALLENGE,
+                    (message): message is ChallengeMessage =>
+                        message.type === GatewayMessageType.CHALLENGE &&
+                        message.for === identifySeq,
                     5000
                 ));
                 const challenge = toByteArray(challengeMessage.challenge);
@@ -128,7 +128,7 @@ GatewayConnectionMessageEvent
                     type: GatewayMessageType.CHALLENGE_RESPONSE,
                     for: challengeMessage.seq,
                     response: fromByteArray(new Uint8Array(signature))
-                };
+                } as const;
                 this.send(responseMessage);
                 await this.waitFor(
                     (message): message is ChallengeSuccessMessage =>
@@ -175,28 +175,24 @@ GatewayConnectionMessageEvent
         this.ws.close();
     }
 
-    createConnection (myIdentity: Identity, peerIdentity: Identity): PeerConnection {
-        const id = generateID();
-        return new PeerConnection(id, this, myIdentity, peerIdentity);
+    createConnection (peerIdentity: Identity): OutgoingPeerRequest {
+        return new OutgoingPeerRequest(this, peerIdentity);
     }
 }
 
-class ConnectionCancelEvent extends TypedEvent<'cancel'> {
+class OutgoingPeerRequestCancelEvent extends TypedEvent<'cancel'> {
     constructor () {
         super('cancel');
     }
 }
 
-class ConnectionErrorEvent extends TypedEvent<'error'> {
-    public error: Error;
-    constructor (error: Error) {
-        super('error');
-        this.error = error;
+class OutgoingPeerRequestAbortEvent extends TypedEvent<'abort'> {
+    constructor () {
+        super('abort');
     }
 }
 
-
-class ConnectionAcknowledgeEvent extends TypedEvent<'acknowledge'> {
+class OutgoingPeerRequestAcknowledgeEvent extends TypedEvent<'acknowledge'> {
     /** Approximate timestamp at which this connection times out. */
     public timeout: number;
     constructor (timeout: number) {
@@ -205,57 +201,118 @@ class ConnectionAcknowledgeEvent extends TypedEvent<'acknowledge'> {
     }
 }
 
-class PeerConnection extends TypedEventTarget<
-ConnectionCancelEvent |
-ConnectionErrorEvent |
-ConnectionAcknowledgeEvent
+class OutgoingPeerRequestAnswerEvent extends TypedEvent<'answer'> {
+    public answer: {
+        type: 'answer',
+        sdp: string
+    };
+    constructor (answer: OutgoingPeerRequestAnswerEvent['answer']) {
+        super('answer');
+        this.answer = answer;
+    }
+}
+
+export class OutgoingPeerRequest extends TypedEventTarget<
+OutgoingPeerRequestCancelEvent |
+OutgoingPeerRequestAbortEvent |
+OutgoingPeerRequestAnswerEvent |
+OutgoingPeerRequestAcknowledgeEvent
 > {
-    /** Used to abort the fetch request when the connection is cancelled */
-    private establishConnectionController: AbortController;
+    private peerIdentity: Identity;
+    private gateway: GatewayConnection;
     private connection: RTCPeerConnection;
 
-    constructor (
-        id: string,
-        gateway: GatewayConnection,
-        myIdentity: Identity,
-        peerIdentity: Identity
-    ) {
+    constructor (gateway: GatewayConnection, peerIdentity: Identity) {
         super();
 
-        this.establishConnectionController = new AbortController();
+        this.peerIdentity = peerIdentity;
+        this.gateway = gateway;
         this.connection = new RTCPeerConnection();
 
-        void this.connect(id, gateway, myIdentity, peerIdentity);
+        void this.connect();
     }
 
-    private async connect (
-        id: string,
-        gateway: GatewayConnection,
-        myIdentity: Identity,
-        peerIdentity: Identity
-    ): Promise<void> {
+    private async connect (): Promise<void> {
         try {
             const channel = this.connection.createDataChannel('send_chan');
             const offer = await this.connection.createOffer();
 
             const requestBody = {
-                connectionID: id,
                 type: GatewayMessageType.REQUEST_PEER,
-                myIdentity,
-                peerIdentity,
+                peerIdentity: this.peerIdentity,
                 offer
+            } as const;
+
+            const requestSeq = this.gateway.send(requestBody);
+
+            const onMessage = (event: GatewayConnectionMessageEvent): void => {
+                const {message} = event;
+
+                if (messageTypeIs(GatewayMessageType.PEER_ANSWER, message) && message.for === requestSeq) {
+                    this.dispatchEvent(new OutgoingPeerRequestAnswerEvent(message.answer));
+                    this.gateway.removeEventListener('message', onMessage);
+                    return;
+                }
+
+                if (messageTypeIs(GatewayMessageType.PEER_REQUEST_ACK, message) && message.for === requestSeq) {
+                    this.dispatchEvent(new OutgoingPeerRequestAcknowledgeEvent(message.timeout));
+                    this.gateway.removeEventListener('message', onMessage);
+                    return;
+                }
+
+                if (messageTypeIs(GatewayMessageType.PEER_REQUEST_TIMED_OUT, message) && message.for === requestSeq) {
+                    this.dispatchEvent(new OutgoingPeerRequestAbortEvent());
+                    this.gateway.removeEventListener('message', onMessage);
+                    return;
+                }
+
+                if (messageTypeIs(GatewayMessageType.PEER_REQUEST_REJECTED, message) && message.for === requestSeq) {
+                    this.dispatchEvent(new OutgoingPeerRequestAbortEvent());
+                    this.gateway.removeEventListener('message', onMessage);
+                    return;
+                }
             };
 
-            gateway.send(requestBody);
+            this.gateway.addEventListener('message', onMessage);
 
         }
         catch (error) {
-            this.dispatchEvent(new ConnectionErrorEvent(error as Error));
+            this.dispatchEvent(new OutgoingPeerRequestAbortEvent());
         }
     }
 
     cancel (): void {
-        this.establishConnectionController.abort();
-        this.dispatchEvent(new ConnectionCancelEvent());
+        const cancelMessage = {
+            type: GatewayMessageType.PEER_REQUEST_CANCEL,
+            peerIdentity: this.peerIdentity
+        };
+        this.gateway.send(cancelMessage);
+        this.dispatchEvent(new OutgoingPeerRequestCancelEvent());
+    }
+}
+
+export class IncomingPeerRequest extends TypedEventTarget<never> {
+    gateway: GatewayConnection;
+    peerIdentity: Identity;
+    peerIdentityString: string;
+    offer: {
+        type: 'offer',
+        sdp: string
+    };
+    timeout: number;
+
+    constructor (
+        gateway: GatewayConnection,
+        peerIdentity: Identity,
+        peerIdentityString: string,
+        offer: IncomingPeerRequest['offer'],
+        timeout: number
+    ) {
+        super();
+        this.gateway = gateway;
+        this.peerIdentity = peerIdentity;
+        this.peerIdentityString = peerIdentityString;
+        this.offer = offer;
+        this.timeout = timeout;
     }
 }

@@ -39,7 +39,14 @@ const setupEventLogic = (store: AppState): () => void => {
         const connection = store.gatewayConnection.value?.connection;
         if (!connection) return;
         connection.addEventListener('peerrequest', event => {
-            console.log(event.request);
+            const {request} = event;
+            const oldIncomingRequests = store.incomingRequests.value;
+            store.incomingRequests.value = {...oldIncomingRequests, [request.peerIdentityString]: request};
+
+            request.addEventListener('abort', () => {
+                const {[request.peerIdentityString]: __, ...otherRequests} = store.incomingRequests.value;
+                store.incomingRequests.value = otherRequests;
+            });
         });
     }));
 

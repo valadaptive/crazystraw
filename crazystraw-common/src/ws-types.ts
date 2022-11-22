@@ -12,16 +12,21 @@ export const enum GatewayMessageType {
     CHALLENGE_SUCCESS,
     /** Sent from the client to request a peer with a given identity. */
     REQUEST_PEER,
-    /** Sent from the server to acknowledge a REQUEST_PEER message. */
-    REQUEST_PEER_ACK,
+    /**
+     * Sent from the server in response to a REQUEST_PEER message
+     */
+    PEER_REQUEST_ACK,
     /** Sent from the server to tell the client a peer has responded to its request. */
     PEER_ANSWER,
-    /** Sent from the client to tell the server that a peer request was cancelled by the client. */
-    REQUEST_PEER_CANCEL,
-    /** Sent from the server to tell the client that a peer request timed out on the server. */
-    REQUEST_PEER_TIMEOUT,
+    /** Sent from the client to tell the server that a stored peer request was cancelled by the client. */
+    PEER_REQUEST_CANCEL,
+    /**
+     * Sent from the server to tell the client that a stored peer request timed out on the server before the requested
+     * peer connected.
+     */
+    PEER_REQUEST_TIMED_OUT,
     /** Sent from the server to tell the client that a peer request was rejected by the peer. */
-    REQUEST_PEER_REJECT,
+    PEER_REQUEST_REJECTED,
     /** Sent from the client to fetch all pending peer requests. */
     GET_ALL_REQUESTS,
     /**
@@ -29,6 +34,8 @@ export const enum GatewayMessageType {
      * Pushed whenever another client makes a peer request to you, or in response to GET_ALL_REQUESTS.
      */
     GOT_PEER_REQUEST,
+    /** Sent to cancel a previous GOT_PEER_REQUEST message. */
+    GOT_PEER_REQUEST_CANCEL,
     /** Sent from the client to respond to a peer request. */
     PEER_RESPONSE,
     /** Sent from the client to reject a peer request. */
@@ -49,7 +56,9 @@ export const enum GatewayCloseCode {
     /** The client attempted to perform an action which requires authentication, but did not authenticate. */
     NOT_AUTHENTICATED,
     /** Another client is already logged in using the same public key */
-    EXISTING_SESSION
+    EXISTING_SESSION,
+    /** A certain resource has been exceeeded e.g. too many open peer requests. */
+    RESOURCE_EXCEEDED
 }
 
 /** Connection ID; used to disambiguate between different connections being established. */
@@ -102,8 +111,10 @@ export type RequestPeerMessage = GatewayMessageBase & {
     }
 };
 
-export type RequestPeerAckMessage = GatewayMessageBase & {
-    type: GatewayMessageType.REQUEST_PEER_ACK,
+export type PeerRequestAckMessage = GatewayMessageBase & {
+    type: GatewayMessageType.PEER_REQUEST_ACK,
+    /** Sequence number of the original REQUEST_PEER message. */
+    for: number,
     /** Approximate timestamp after which the request will time out. */
     timeout: number
 };
@@ -119,20 +130,20 @@ export type PeerAnswerMessage = GatewayMessageBase & {
     }
 };
 
-export type RequestPeerCancelMessage = GatewayMessageBase & {
-    type: GatewayMessageType.REQUEST_PEER_CANCEL,
+export type PeerRequestCancelMessage = GatewayMessageBase & {
+    type: GatewayMessageType.PEER_REQUEST_CANCEL,
     /** The peer's public key, encoded into base64. */
     peerIdentity: string
 };
 
-export type RequestPeerTimeoutMessage = GatewayMessageBase & {
-    type: GatewayMessageType.REQUEST_PEER_TIMEOUT,
+export type PeerRequestTimedOutMessage = GatewayMessageBase & {
+    type: GatewayMessageType.PEER_REQUEST_TIMED_OUT,
     /** Sequence number of the original REQUEST_PEER message. */
     for: number
 };
 
-export type RequestPeerRejectMessage = GatewayMessageBase & {
-    type: GatewayMessageType.REQUEST_PEER_REJECT,
+export type PeerRequestRejectedMessage = GatewayMessageBase & {
+    type: GatewayMessageType.PEER_REQUEST_REJECTED,
     /** Sequence number of the original REQUEST_PEER message. */
     for: number
 };
@@ -149,7 +160,15 @@ export type GotPeerRequestMessage = GatewayMessageBase & {
     offer: {
         type: 'offer',
         sdp: string
-    }
+    },
+    /** Timestamp at which the server will time this peer request out. */
+    timeout: number
+};
+
+export type GotPeerRequestCancelMessage = GatewayMessageBase & {
+    type: GatewayMessageType.GOT_PEER_REQUEST_CANCEL,
+    /** Sequence number of the original GOT_PEER_REQUEST message. */
+    for: number
 };
 
 export type PeerResponseMessage = GatewayMessageBase & {
@@ -165,8 +184,8 @@ export type PeerResponseMessage = GatewayMessageBase & {
 
 export type PeerRejectMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_REJECT,
-    /** The sequence number of the original GOT_PEER_REQUEST message. */
-    for: number
+    /** The public key of the peer requesting us, encoded into base64. */
+    peerIdentity: string
 };
 
 export type GatewayMessage =
@@ -175,12 +194,13 @@ ChallengeMessage |
 ChallengeResponseMessage |
 ChallengeSuccessMessage |
 RequestPeerMessage |
-RequestPeerAckMessage |
+PeerRequestAckMessage |
 PeerAnswerMessage |
-RequestPeerCancelMessage |
-RequestPeerTimeoutMessage |
-RequestPeerRejectMessage |
+PeerRequestCancelMessage |
+PeerRequestTimedOutMessage |
+PeerRequestRejectedMessage |
 GetAllRequestsMessage |
 GotPeerRequestMessage |
+GotPeerRequestCancelMessage |
 PeerResponseMessage |
 PeerRejectMessage;

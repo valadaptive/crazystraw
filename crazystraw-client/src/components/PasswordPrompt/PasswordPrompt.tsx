@@ -7,7 +7,7 @@ import importProfileAction from '../../actions/import-profile';
 
 import {useAppState, useAction} from '../../util/state';
 
-import Profile from '../../rtc/profile';
+import {PersonalProfile} from '../../rtc/profile';
 
 const PasswordPrompt = (): JSX.Element | null => {
     const importProfile = useAction(importProfileAction);
@@ -25,7 +25,7 @@ const PasswordPrompt = (): JSX.Element | null => {
 
     const decryptProfileIdentity = useMemo(() => async () => {
         try {
-            const profile = await Profile.import(savedProfileValue, password);
+            const profile = await PersonalProfile.import(savedProfileValue, password);
             importProfile(profile, savedProfileValue);
         } catch (err) {
             setErrored(true);

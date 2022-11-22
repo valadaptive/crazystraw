@@ -1,6 +1,6 @@
 import {toByteArray, fromByteArray} from 'base64-js';
 
-import Identity from './identity';
+import {Identity, PersonalIdentity} from './identity';
 
 class Profile {
     public identity: Identity;
@@ -19,6 +19,20 @@ class Profile {
         this.avatar = avatar;
         this.bio = bio;
     }
+}
+
+class PersonalProfile extends Profile {
+    public identity: PersonalIdentity;
+
+    constructor (
+        identity: PersonalIdentity,
+        handle: string,
+        avatar: Blob | null,
+        bio: string | null
+    ) {
+        super(identity, handle, avatar, bio);
+        this.identity = identity;
+    }
 
     public async export (password: string): Promise<string> {
         const exportedIdentity = await this.identity.export(password);
@@ -31,7 +45,7 @@ class Profile {
         });
     }
 
-    public static async import (json: string, password: string): Promise<Profile> {
+    public static async import (json: string, password: string): Promise<PersonalProfile> {
         const parsedJson = JSON.parse(json) as Partial<Record<string, unknown>>;
         const {handle, bio, avatar: avatarStr, identity: identityJson} = parsedJson;
         if (
@@ -43,11 +57,11 @@ class Profile {
             throw new Error('Invalid JSON');
         }
 
-        const identity = await Identity.import(identityJson, password);
+        const identity = await PersonalIdentity.import(identityJson, password);
         const avatar = avatarStr ? new Blob([toByteArray(avatarStr)]) : null;
 
-        return new Profile(identity, handle, avatar, bio);
+        return new PersonalProfile(identity, handle, avatar, bio);
     }
 }
 
-export default Profile;
+export {Profile, PersonalProfile};
