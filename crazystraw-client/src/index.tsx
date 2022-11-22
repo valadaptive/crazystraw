@@ -4,7 +4,9 @@ import {render} from 'preact';
 
 import App from './components/App/App';
 
-import {AppContext, store} from './util/state';
+import {AppContext, createStore} from './util/state';
+
+const store = createStore();
 
 render(
     <AppContext.Provider value={store}>

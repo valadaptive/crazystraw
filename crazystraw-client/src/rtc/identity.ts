@@ -40,7 +40,7 @@ class Identity {
                 name: 'PBKDF2',
                 hash: 'SHA-256',
                 salt,
-                iterations: 10000
+                iterations: 100000
             },
             keyMaterial,
             {name: 'AES-GCM', length: 256},

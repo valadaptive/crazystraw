@@ -2,10 +2,12 @@ import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
 import {signal, effect, Signal, batch} from '@preact/signals';
 
-import Profile from '../rtc/profile';
-import {GatewayConnection, GatewayConnectionState, GatewayConnectionStateChangeEvent} from '../rtc/gateway';
+import setupEventLogic from './event-logic';
 
-const enum ProfileState {
+import Profile from '../rtc/profile';
+import {GatewayConnection, GatewayConnectionState, PeerRequest} from '../rtc/gateway';
+
+export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
     NONEXISTENT,
     GENERATING,
@@ -15,7 +17,7 @@ const enum ProfileState {
 /**
  * Global application state
  */
-type AppState = {
+export type AppState = {
     savedProfile: Signal<string | null>,
     profile: Signal<Profile | null>
     profileState: Signal<ProfileState>,
@@ -23,17 +25,19 @@ type AppState = {
         connection: GatewayConnection,
         state: Signal<GatewayConnectionState>,
         cleanup: () => void
-    } | null>
+    } | null>,
+    incomingRequests: Signal<Partial<Record<string, PeerRequest>>>
 };
 
 const CONNECTION_SERVER = 'ws://localhost:9876';
 
-const createStore = (): AppState => {
+export const createStore = (): AppState => {
     const store: AppState = {
         savedProfile: signal(null),
         profile: signal(null),
         profileState: signal(ProfileState.NONEXISTENT),
-        gatewayConnection: signal(null)
+        gatewayConnection: signal(null),
+        incomingRequests: signal({})
     };
 
     const savedProfile = localStorage.getItem('profile');
@@ -54,49 +58,24 @@ const createStore = (): AppState => {
         }
     });
 
-    // Close the old connection when the profile changes or is deleted
-    effect(() => {
-        const prevGatewayConnection = store.gatewayConnection.peek();
-        if (store.profile.value) {
-            if (prevGatewayConnection) prevGatewayConnection.cleanup();
-            const newConnection = new GatewayConnection(CONNECTION_SERVER, store.profile.value.identity);
-            const stateSignal = signal(newConnection.state);
-            const onStateChange = (event: GatewayConnectionStateChangeEvent): void => {
-                stateSignal.value = event.state;
-            };
-            newConnection.addEventListener('statechange', onStateChange as EventListener);
-            const cleanup = (): void => {
-                newConnection.close();
-                newConnection.removeEventListener('statechange', onStateChange as EventListener);
-            };
-            store.gatewayConnection.value = {
-                connection: newConnection,
-                state: stateSignal,
-                cleanup
-            };
-        } else if (prevGatewayConnection) {
-            prevGatewayConnection.cleanup();
-            store.gatewayConnection.value = null;
-        }
-    });
+    setupEventLogic(store);
 
     return store;
 };
 
-const store = createStore();
-
-const AppContext = createContext(store);
+export const AppContext = createContext<AppState | undefined>(undefined);
 
 /**
  * Hook for accessing global application state
  */
-const useAppState = (): AppState => useContext(AppContext);
-const useAction = <T extends unknown[]>(
-    func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => unknown) => {
+export const useAppState = (): AppState => {
     const context = useContext(AppContext);
-    return useMemo(() => func.bind(null, context), [context]);
+    if (!context) throw new Error('No AppState provided');
+    return context;
 };
 
-export {useAppState, useAction, AppState, AppContext, store};
-
-export {ProfileState};
+export const useAction = <T extends unknown[]>(
+    func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => unknown) => {
+    const context = useAppState();
+    return useMemo(() => func.bind(null, context), [context]);
+};
