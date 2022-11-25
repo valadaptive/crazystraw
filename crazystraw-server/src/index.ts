@@ -62,9 +62,17 @@ class WrappedSocket extends EventEmitter {
         this.seq += 2;
         return new Promise((resolve, reject) => {
             this.socket.send(JSON.stringify(message), err => {
-                err ? reject() : resolve(messageSeq);
+                err ? reject(err) : resolve(messageSeq);
             });
         });
+    }
+
+    /**
+     * Used to handle any errors (e.g. "this socket closed") that may arise in timeouts. If a promise is rejected from
+     * inside a timeout handler, it brings down the entire process. Thanks, Node!
+     */
+    sendAndForget (message: Omit<GatewayMessage, 'seq'>): void {
+        void this.send(message).catch(() => Promise.resolve());
     }
 }
 
@@ -107,7 +115,7 @@ class PeerRequest extends EventEmitter {
                     type: GatewayMessageType.GOT_PEER_REQUEST_TIMED_OUT,
                     for: origSeq
                 };
-                void socket.send(timeoutMessage);
+                socket.sendAndForget(timeoutMessage);
             }
         }, timeout - Date.now());
         this.gotPeerRequestMessages = [];
@@ -155,7 +163,12 @@ class Gateway {
         server.on('connection', ws => {
             const wrappedSocket = new WrappedSocket(ws);
             wrappedSocket.on('message', message => {
-                void this.respondToMessage(message as GatewayMessage, wrappedSocket);
+                try {
+                    void this.respondToMessage(message as GatewayMessage, wrappedSocket);
+                } catch (err) {
+                    console.warn('Error in responding to message:', err);
+                    ws.close(1002);
+                }
             });
             console.log('Connection!');
             //console.log(ws);
@@ -311,6 +324,10 @@ class Gateway {
 
                 const peerRequest = new PeerRequest(message.seq, message.offer, Date.now() + REQUEST_PEER_TIMEOUT);
                 peerRequest.once('timeout', () => {
+                    this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
+                });
+
+                ws.socket.once('close', () => {
                     this.openPeerRequests.delete(message.peerIdentity, auth.publicKeyString);
                 });
 

@@ -39,6 +39,7 @@ const setupEventLogic = (store: AppState): () => void => {
         const connection = store.gatewayConnection.value?.connection;
         if (!connection) return;
         connection.addEventListener('peerrequest', event => {
+            console.log(event);
             const {request} = event;
             const oldIncomingRequests = store.incomingRequests.value;
             const requestStateSignal = signal(request.state);

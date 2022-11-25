@@ -4,6 +4,7 @@ import type {JSX} from 'preact';
 import {useState, useMemo, useEffect} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 
+import ContactsList from '../ContactsList/ContactsList';
 import TopBar from '../TopBar/TopBar';
 import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
@@ -58,6 +59,7 @@ const App = (): JSX.Element => {
             <TopBar />
             {prompt}
             {peerPrompt}
+            <ContactsList />
         </div>
     );
 

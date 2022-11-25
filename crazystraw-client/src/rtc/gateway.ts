@@ -235,8 +235,14 @@ OutgoingPeerRequestAcknowledgeEvent
 
     private async connect (): Promise<void> {
         try {
-            // const channel = this.connection.createDataChannel('send_chan');
+            const channel = this.connection.createDataChannel('send_chan');
             const offer = await this.connection.createOffer();
+            await this.connection.setLocalDescription(offer);
+
+            this.connection.addEventListener('icecandidate', console.log);
+            this.connection.addEventListener('icegatheringstatechange', console.log)
+
+            this.connection.addEventListener('negotiationneeded', console.log);
 
             const requestBody = {
                 type: GatewayMessageType.REQUEST_PEER,
@@ -305,7 +311,9 @@ export const enum IncomingPeerRequestState {
     /** The peer cancelled the request. */
     CANCELLED,
     /** The request timed out on the server. */
-    TIMED_OUT
+    TIMED_OUT,
+    /** There was an error somewhere else in the process. */
+    ERRORED
 }
 
 class IncomingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
@@ -345,18 +353,57 @@ export class IncomingPeerRequest extends TypedEventTarget<IncomingPeerRequestSta
 
         const onMessage = ({message}: GatewayConnectionMessageEvent): void => {
             if (messageTypeIs(GatewayMessageType.GOT_PEER_REQUEST_CANCELLED, message) && message.for === seq) {
-                this.state = IncomingPeerRequestState.CANCELLED;
-                this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
+                this.setState(IncomingPeerRequestState.CANCELLED);
                 return;
             }
 
             if (messageTypeIs(GatewayMessageType.GOT_PEER_REQUEST_TIMED_OUT, message) && message.for === seq) {
-                this.state = IncomingPeerRequestState.TIMED_OUT;
-                this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
+                this.setState(IncomingPeerRequestState.TIMED_OUT);
                 return;
             }
         };
 
         this.gateway.addEventListener('message', onMessage);
+    }
+
+    private setState (newState: IncomingPeerRequestState): void {
+        this.state = newState;
+        this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
+    }
+
+    async accept (): Promise<void> {
+        // TODO: race condition when setting state? where to set state?
+        if (this.state !== IncomingPeerRequestState.ACTIVE) {
+            throw new Error('Cannot call accept() right now');
+        }
+        try {
+            this.setState(IncomingPeerRequestState.ACCEPTED);
+            const connection = new RTCPeerConnection();
+            await connection.setRemoteDescription(this.offer);
+            const answer = await connection.createAnswer();
+            await connection.setLocalDescription(answer);
+    
+            const resp = {
+                type: GatewayMessageType.PEER_RESPONSE,
+                peerIdentity: this.peerIdentityString,
+                answer
+            };
+            this.gateway.send(resp);
+        } catch (err) {
+            this.setState(IncomingPeerRequestState.ERRORED);
+        }
+    }
+
+    reject (): void {
+        if (this.state !== IncomingPeerRequestState.ACTIVE) {
+            throw new Error('Cannot call reject() right now');
+        }
+
+        const resp = {
+            type: GatewayMessageType.PEER_REJECT,
+            peerIdentity: this.peerIdentityString
+        };
+        this.gateway.send(resp);
+        this.setState(IncomingPeerRequestState.REJECTED);
     }
 }

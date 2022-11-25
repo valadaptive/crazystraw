@@ -36,7 +36,8 @@ export type AppState = {
     incomingRequests: Signal<Partial<Record<string, {
         request: IncomingPeerRequest,
         state: Signal<IncomingPeerRequestState>
-    }>>>
+    }>>>,
+    contacts: Signal<Contact[]>
 };
 
 export const createStore = (): AppState => {
@@ -45,7 +46,8 @@ export const createStore = (): AppState => {
         profile: signal(null),
         profileState: signal(ProfileState.NONEXISTENT),
         gatewayConnection: signal(null),
-        incomingRequests: signal({})
+        incomingRequests: signal({}),
+        contacts: signal([])
     };
 
     const savedProfile = localStorage.getItem('profile');
