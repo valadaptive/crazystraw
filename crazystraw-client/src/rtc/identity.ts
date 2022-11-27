@@ -3,9 +3,17 @@ import {toByteArray, fromByteArray} from 'base64-js';
 const ECDSA_PARAMS = {name: 'ECDSA', namedCurve: 'P-256'};
 
 export class Identity {
+    /** The identity's public key. Can be used to verify messages signed by this person. */
     public publicKey: CryptoKey;
 
+    /** The identity's public key in raw export form. Sent over the wire frequently. */
     public rawPublicKey: Uint8Array;
+    /**
+     * The identity's public key fingerprint--the leftmost 128 bits of the raw key's SHA-256 hash
+     * (as hashed in binary form, not base64).
+     * This *should* be secure--any attacker must find a second preimage, not merely a collision, as the public keys are
+     * randomly generated in-browser and hence the fingerprints are random too.
+     */
     public publicKeyFingerprint: Uint8Array;
 
     protected constructor (
@@ -33,7 +41,7 @@ export class Identity {
         );
 
         const fingerprint = await crypto.subtle.digest('SHA-256', rawKey);
-        return new Identity(publicKey, rawKey, new Uint8Array(fingerprint));
+        return new Identity(publicKey, rawKey, new Uint8Array(fingerprint.slice(0, 16)));
     }
 
     toBase64 (): string {

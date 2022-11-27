@@ -22,7 +22,18 @@ export class RTCChannelStateChangeEvent extends TypedEvent<'statechange'> {
     }
 }
 
-export class RTCChannel extends TypedEventTarget<RTCChannelStateChangeEvent> {
+export class RTCChannelMessageEvent extends TypedEvent<'message'> {
+    public message: ArrayBuffer;
+    constructor (message: ArrayBuffer) {
+        super('message');
+        this.message = message;
+    }
+}
+
+export class RTCChannel extends TypedEventTarget<
+RTCChannelStateChangeEvent |
+RTCChannelMessageEvent
+> {
     public state: RTCChannelState;
 
     private gateway: GatewayConnection;
@@ -39,6 +50,8 @@ export class RTCChannel extends TypedEventTarget<RTCChannelStateChangeEvent> {
     private ignoreOffer: boolean;
 
     private channel: RTCDataChannel;
+
+    private static HEADER_SIZE = 6;
 
     constructor (gateway: GatewayConnection, peerIdentity: Identity, connectionID: string, polite: boolean) {
         super();
@@ -164,10 +177,103 @@ export class RTCChannel extends TypedEventTarget<RTCChannelStateChangeEvent> {
         };
         this.gateway.addEventListener('message', onMessage, {signal});
 
-        this.channel = this.connection.createDataChannel('channel', {negotiated: true, id: 0});
+
+        this.channel = this.connection.createDataChannel('channel', {
+            negotiated: true,
+            id: 0,
+            ordered: true
+        });
+        this.channel.binaryType = 'arraybuffer';
+
         this.channel.addEventListener('open', () => {
             this.setState(RTCChannelState.CONNECTED);
         }, {signal, once: true});
+
+        // Messages are ordered and reliable, so we can reassemble them in order
+        let currentMessageChunks: Uint8Array[] | null = null;
+        let currentMessageNumChunks = 0;
+        let currentMessageTotalSize = 0;
+        let currentMessageChunkSize = 0;
+        this.channel.addEventListener('message', event => {
+            try {
+                const message = event.data as unknown;
+                if (!(message instanceof ArrayBuffer)) throw new Error('Message must be an ArrayBuffer');
+                const dv = new DataView(message);
+                const messageIndex = dv.getUint16(0, true);
+                const totalMessageSize = dv.getUint32(2, true);
+    
+                if (messageIndex === 0) {
+                    if (currentMessageChunks !== null) throw new Error('Previous message not cleared yet');
+                    currentMessageTotalSize = totalMessageSize;
+                    if (message.byteLength === totalMessageSize + RTCChannel.HEADER_SIZE) {
+                        // This is the only message chunk
+                        this.dispatchEvent(new RTCChannelMessageEvent(message.slice(RTCChannel.HEADER_SIZE)));
+                    } else {
+                        // There are more message chunks to follow. Store them.
+                        const maxMessageSize = message.byteLength;
+                        currentMessageChunkSize = maxMessageSize - RTCChannel.HEADER_SIZE;
+                        currentMessageNumChunks = Math.ceil(totalMessageSize / currentMessageChunkSize);
+    
+                        currentMessageChunks = [new Uint8Array(message, RTCChannel.HEADER_SIZE)];
+                    }
+                } else {
+                    if (currentMessageChunks === null || messageIndex !== currentMessageChunks.length) {
+                        throw new Error('Previous message chunks not received in order');
+                    }
+                    if (messageIndex >= currentMessageNumChunks) throw new Error('Message index out of bounds');
+                    if (currentMessageTotalSize !== totalMessageSize) {
+                        throw new Error('Message size disagrees with previous given size');
+                    }
+    
+                    currentMessageChunks.push(new Uint8Array(message, RTCChannel.HEADER_SIZE));
+    
+                    if (currentMessageChunks.length === currentMessageNumChunks) {
+                        // TODO: allow negotiation of max message size at this layer to prevent denial of service by
+                        // using up all memory
+                        const assembledBuffer = new Uint8Array(totalMessageSize);
+                        for (let i = 0; i < currentMessageNumChunks; i++) {
+                            assembledBuffer.set(currentMessageChunks[i], i * currentMessageChunkSize);
+                        }
+                        this.dispatchEvent(new RTCChannelMessageEvent(assembledBuffer.buffer));
+                        currentMessageChunks = null;
+                    }
+                }
+            } catch (err) {
+                // Close connection: protocol error
+                this.close();
+            }
+
+        }, {signal});
+    }
+
+    public send (data: ArrayBuffer): void {
+        if (!(data instanceof ArrayBuffer)) throw new Error('Data must be an ArrayBuffer instance');
+        if (this.channel.readyState !== 'open') throw new Error('Channel is not open');
+
+        // Split message up into multiple smaller messages which all fit over the SCTP channel
+        const maxMessageSize = this.connection.sctp?.maxMessageSize;
+        if (!maxMessageSize) throw new Error('SCTP max message size not present');
+
+        const chunkDataSize = maxMessageSize - RTCChannel.HEADER_SIZE;
+        // TODO: may lose floating point precision?
+        const numChunks = Math.ceil(data.byteLength / chunkDataSize);
+
+        const messageBuffer = new ArrayBuffer(Math.min(maxMessageSize, data.byteLength + RTCChannel.HEADER_SIZE));
+        const dv = new DataView(messageBuffer);
+        dv.setUint32(2, data.byteLength, true);
+        const messageArr = new Uint8Array(messageBuffer, RTCChannel.HEADER_SIZE);
+
+        for (let i = 0; i < numChunks; i++) {
+            dv.setUint16(0, i, true);
+            const remainder = data.byteLength - (i * chunkDataSize);
+            messageArr.set(new Uint8Array(data, i * chunkDataSize, Math.min(chunkDataSize, remainder)));
+            if (i === numChunks - 1) {
+                const last = new Uint8Array(messageBuffer, 0, remainder + RTCChannel.HEADER_SIZE);
+                this.channel.send(last);
+            } else {
+                this.channel.send(messageBuffer);
+            }
+        }
     }
 
     public close (): void {

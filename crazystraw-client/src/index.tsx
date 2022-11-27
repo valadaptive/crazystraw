@@ -1,5 +1,6 @@
 import './global.scss';
 
+import 'webrtc-adapter';
 import {render} from 'preact';
 
 import App from './components/App/App';
