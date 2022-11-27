@@ -6,7 +6,7 @@ import {useComputed} from '@preact/signals';
 
 import {useAppState, useAction, Contact} from '../../util/state';
 import useKey from '../../util/use-key';
-import {IncomingPeerRequest, IncomingPeerRequestState} from '../../rtc/gateway';
+import {IncomingPeerRequest, IncomingPeerRequestState} from '../../rtc/peer-request';
 
 const ContactItem = ({contact}: {contact: Contact}): JSX.Element => {
     return (
@@ -20,7 +20,7 @@ const IncomingContactRequest = ({request, state}: {
     request: IncomingPeerRequest,
     state: IncomingPeerRequestState
 }): JSX.Element => {
-    const buttons = state === IncomingPeerRequestState.ACTIVE ? <>
+    const buttons = state === IncomingPeerRequestState.PENDING ? <>
         <button onClick={(): unknown => request.accept()}>Accept</button>
         <button onClick={(): unknown => request.reject()}>Reject</button>
     </> :

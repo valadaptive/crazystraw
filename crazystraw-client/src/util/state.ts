@@ -6,7 +6,8 @@ import setupEventLogic from './event-logic';
 
 import {Identity} from '../rtc/identity';
 import {Profile, PersonalProfile} from '../rtc/profile';
-import {GatewayConnection, GatewayConnectionState, IncomingPeerRequest, IncomingPeerRequestState} from '../rtc/gateway';
+import {GatewayConnection, GatewayConnectionState} from '../rtc/gateway';
+import {IncomingPeerRequest, IncomingPeerRequestState} from '../rtc/peer-request';
 
 export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,

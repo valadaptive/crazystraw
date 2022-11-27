@@ -2,7 +2,7 @@ import {toByteArray, fromByteArray} from 'base64-js';
 
 const ECDSA_PARAMS = {name: 'ECDSA', namedCurve: 'P-256'};
 
-class Identity {
+export class Identity {
     public publicKey: CryptoKey;
 
     public rawPublicKey: Uint8Array;
@@ -45,7 +45,7 @@ class Identity {
     }
 }
 
-class PersonalIdentity extends Identity {
+export class PersonalIdentity extends Identity {
     public privateKey: CryptoKey;
 
     private constructor (
@@ -172,5 +172,3 @@ class PersonalIdentity extends Identity {
         );
     }
 }
-
-export {Identity, PersonalIdentity};

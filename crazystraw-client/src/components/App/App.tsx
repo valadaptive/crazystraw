@@ -13,7 +13,7 @@ import createProfileAction from '../../actions/create-profile';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
-import {OutgoingPeerRequest} from '../../rtc/gateway';
+import {OutgoingPeerRequest} from '../../rtc/peer-request';
 import {Identity} from '../../rtc/identity';
 
 const App = (): JSX.Element => {
