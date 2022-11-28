@@ -21,6 +21,7 @@ export class Identity {
         rawPublicKey: Uint8Array,
         publicKeyFingerprint: Uint8Array
     ) {
+        if (publicKeyFingerprint.byteLength !== 16) throw new Error('Public key fingerprint must be 16 bytes');
         this.publicKey = publicKey;
         this.rawPublicKey = rawPublicKey;
         this.publicKeyFingerprint = publicKeyFingerprint;
@@ -30,8 +31,7 @@ export class Identity {
         return crypto.subtle.verify({name: 'ECDSA', hash: 'SHA-256'}, this.publicKey, signature, data);
     }
 
-    static async fromPublicKeyString (publicKeyString: string): Promise<Identity> {
-        const rawKey = toByteArray(publicKeyString);
+    static async fromPublicKey (rawKey: ArrayBuffer): Promise<Identity> {
         const publicKey = await crypto.subtle.importKey(
             'raw',
             rawKey,
@@ -41,11 +41,11 @@ export class Identity {
         );
 
         const fingerprint = await crypto.subtle.digest('SHA-256', rawKey);
-        return new Identity(publicKey, rawKey, new Uint8Array(fingerprint.slice(0, 16)));
+        return new Identity(publicKey, new Uint8Array(rawKey), new Uint8Array(fingerprint.slice(0, 16)));
     }
 
     toBase64 (): string {
-        return fromByteArray(this.rawPublicKey);
+        return fromByteArray(this.publicKeyFingerprint);
     }
 
     toJSON (): never {
@@ -164,7 +164,7 @@ export class PersonalIdentity extends Identity {
             publicKey,
             privateKey,
             importedPublicKey,
-            new Uint8Array(fingerprint)
+            new Uint8Array(fingerprint.slice(0, 16))
         );
     }
 

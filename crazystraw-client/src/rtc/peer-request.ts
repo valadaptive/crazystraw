@@ -1,7 +1,7 @@
 import {GatewayMessageType} from 'crazystraw-common/ws-types';
 
 import {GatewayConnection, GatewayConnectionMessageEvent} from './gateway';
-import {Identity, PersonalIdentity} from './identity';
+import {PersonalIdentity} from './identity';
 import {OTRChannel, OTRChannelState} from './otr';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
@@ -57,7 +57,7 @@ OutgoingPeerRequestStateChangeEvent
 > {
     public state: OutgoingPeerRequestState;
 
-    private peerIdentity: Identity;
+    private peerIdentity: string;
     private gateway: GatewayConnection;
     private connectionID: string;
     private channel: OTRChannel | undefined;
@@ -68,7 +68,7 @@ OutgoingPeerRequestStateChangeEvent
         this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
     }
 
-    constructor (gateway: GatewayConnection, myIdentity: PersonalIdentity, peerIdentity: Identity) {
+    constructor (gateway: GatewayConnection, myIdentity: PersonalIdentity, peerIdentity: string) {
         super();
 
         this.state = OutgoingPeerRequestState.PENDING;
@@ -127,7 +127,7 @@ OutgoingPeerRequestStateChangeEvent
 
         this.gateway.send({
             type: GatewayMessageType.PEER_REQUEST,
-            peerIdentity: this.peerIdentity.toBase64(),
+            peerIdentity: this.peerIdentity,
             connectionID: this.connectionID
         });
     }
@@ -135,7 +135,7 @@ OutgoingPeerRequestStateChangeEvent
     cancel (): void {
         this.gateway.send({
             type: GatewayMessageType.PEER_REQUEST_CANCEL,
-            peerIdentity: this.peerIdentity.toBase64(),
+            peerIdentity: this.peerIdentity,
             connectionID: this.connectionID
         });
         this.setState(OutgoingPeerRequestState.CANCELLED);
@@ -178,11 +178,10 @@ IncomingPeerRequestStateChangeEvent |
 IncomingPeerRequestConnectEvent
 > {
     public state: IncomingPeerRequestState;
-    public peerIdentityString: string;
+    public peerIdentity: string;
 
     private gateway: GatewayConnection;
     private myIdentity: PersonalIdentity;
-    private peerIdentity: Identity;
     private connectionID: string;
     private channel: OTRChannel | undefined;
     private abortController: AbortController;
@@ -190,15 +189,13 @@ IncomingPeerRequestConnectEvent
     constructor (
         gateway: GatewayConnection,
         myIdentity: PersonalIdentity,
-        peerIdentity: Identity,
-        peerIdentityString: string,
+        peerIdentity: string,
         connectionID: string
     ) {
         super();
         this.gateway = gateway;
         this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
-        this.peerIdentityString = peerIdentityString;
         this.state = IncomingPeerRequestState.PENDING;
         this.connectionID = connectionID;
         this.abortController = new AbortController();
@@ -230,7 +227,7 @@ IncomingPeerRequestConnectEvent
             const {signal} = this.abortController;
             this.gateway.send({
                 type: GatewayMessageType.PEER_ACCEPT,
-                peerIdentity: this.peerIdentityString,
+                peerIdentity: this.peerIdentity,
                 connectionID: this.connectionID
             });
             const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, false);
@@ -266,7 +263,7 @@ IncomingPeerRequestConnectEvent
 
         this.gateway.send({
             type: GatewayMessageType.PEER_REJECT,
-            peerIdentity: this.peerIdentityString,
+            peerIdentity: this.peerIdentity,
             connectionID: this.connectionID
         });
         this.setState(IncomingPeerRequestState.REJECTED);

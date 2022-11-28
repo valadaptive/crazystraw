@@ -1,7 +1,6 @@
 import {GatewayMessageType} from 'crazystraw-common/ws-types';
 
 import {GatewayConnection, GatewayConnectionMessageEvent} from './gateway';
-import {Identity} from './identity';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
 
@@ -37,8 +36,7 @@ RTCChannelMessageEvent
     public state: RTCChannelState;
 
     private gateway: GatewayConnection;
-    private peerIdentity: Identity;
-    private peerIdentityString: string;
+    private peerIdentity: string;
     private connectionID: string;
     /** Used for cleanly removing all event listeners, preventing memory leaks */
     private abortController: AbortController;
@@ -53,14 +51,13 @@ RTCChannelMessageEvent
 
     private static HEADER_SIZE = 6;
 
-    constructor (gateway: GatewayConnection, peerIdentity: Identity, connectionID: string, polite: boolean) {
+    constructor (gateway: GatewayConnection, peerIdentity: string, connectionID: string, polite: boolean) {
         super();
 
         this.state = RTCChannelState.CONNECTING;
 
         this.gateway = gateway;
         this.peerIdentity = peerIdentity;
-        this.peerIdentityString = peerIdentity.toBase64();
         this.connectionID = connectionID;
         this.abortController = new AbortController();
 
@@ -103,7 +100,7 @@ RTCChannelMessageEvent
                 if (!event.candidate) return;
                 this.gateway.send({
                     type: GatewayMessageType.PEER_ICE_CANDIDATE,
-                    peerIdentity: this.peerIdentityString,
+                    peerIdentity: this.peerIdentity,
                     connectionID: this.connectionID,
                     candidate: event.candidate
                 });
@@ -289,7 +286,7 @@ RTCChannelMessageEvent
         await this.connection.setLocalDescription();
         this.gateway.send({
             type: GatewayMessageType.PEER_MESSAGE_DESCRIPTION,
-            peerIdentity: this.peerIdentityString,
+            peerIdentity: this.peerIdentity,
             connectionID: this.connectionID,
             description: this.connection.localDescription!
         });

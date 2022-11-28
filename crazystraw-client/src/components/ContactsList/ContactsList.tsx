@@ -25,10 +25,10 @@ const IncomingContactRequest = ({request, state}: {
         <button onClick={(): unknown => request.reject()}>Reject</button>
     </> :
         null;
-    
+
     return (
         <div className={style.IncomingContactRequest}>
-            Incoming contact request from {request.peerIdentityString}
+            Incoming contact request from {request.peerIdentity}
             <br />
             State {state}
             <br />

@@ -77,6 +77,8 @@ export type GatewayMessageBase = {
 
 export type IdentifyMessage = GatewayMessageBase & {
     type: GatewayMessageType.IDENTIFY,
+    /** Peer's unique identity string, currently its public key fingerprint. */
+    identity: string,
     /** ECDSA public key in raw format, encoded into base64. */
     publicKey: string
 };
@@ -105,7 +107,7 @@ export type ChallengeSuccessMessage = GatewayMessageBase & {
 
 export type PeerRequestMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_REQUEST,
-    /** The peer's public key, encoded into base64. */
+    /** Peer's unique identity string, currently its public key fingerprint. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
@@ -125,7 +127,7 @@ export type PeerRequestRejectedMessage = GatewayMessageBase & {
 
 export type PeerRequestCancelMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_REQUEST_CANCEL,
-    /** The peer's public key, encoded into base64. */
+    /** Peer's unique identity string, currently its public key fingerprint. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
@@ -139,7 +141,7 @@ export type PeerOfflineMessage = GatewayMessageBase & {
 
 export type PeerMessageDescriptionMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_MESSAGE_DESCRIPTION,
-    /** The peer's public key, encoded into base64. */
+    /** Peer's unique identity string, currently its public key fingerprint. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string,
@@ -149,7 +151,7 @@ export type PeerMessageDescriptionMessage = GatewayMessageBase & {
 
 export type PeerIceCandidateMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_ICE_CANDIDATE,
-    /** The peer's public key, encoded into base64. */
+    /** Peer's unique identity string, currently its public key fingerprint. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string,
@@ -175,7 +177,7 @@ export type GotPeerIceCandidateMessage = GatewayMessageBase & {
 
 export type GotPeerRequestMessage = GatewayMessageBase & {
     type: GatewayMessageType.GOT_PEER_REQUEST,
-    /** The public key of the peer requesting us, encoded into base64. */
+    /** The identity of the peer requesting us. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
@@ -189,7 +191,7 @@ export type GotPeerRequestCancelledMessage = GatewayMessageBase & {
 
 export type PeerAcceptMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_ACCEPT,
-    /** The public key of the peer requesting us, encoded into base64. */
+    /** The identity of the peer requesting us. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
@@ -197,7 +199,7 @@ export type PeerAcceptMessage = GatewayMessageBase & {
 
 export type PeerRejectMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_REJECT,
-    /** The public key of the peer requesting us, encoded into base64. */
+    /** The identity of the peer requesting us. */
     peerIdentity: string,
     /** Unique ID for this WebRTC connection. */
     connectionID: string

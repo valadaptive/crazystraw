@@ -4,7 +4,6 @@ import {signal, effect, Signal, batch} from '@preact/signals';
 
 import setupEventLogic from './event-logic';
 
-import {Identity} from '../rtc/identity';
 import {Profile, PersonalProfile} from '../rtc/profile';
 import {GatewayConnection, GatewayConnectionState} from '../rtc/gateway';
 import {IncomingPeerRequest, IncomingPeerRequestState} from '../rtc/peer-request';
@@ -17,7 +16,7 @@ export const enum ProfileState {
 }
 
 export type Contact = {
-    identity: Identity,
+    identity: string,
     profile: Profile | null,
     lastMessageTimestamp: number
 };

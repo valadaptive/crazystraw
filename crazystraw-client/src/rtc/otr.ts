@@ -1,3 +1,5 @@
+import {toByteArray} from 'base64-js';
+
 import {RTCChannel, RTCChannelState} from './channel';
 import {GatewayConnection} from './gateway';
 import {Identity, PersonalIdentity} from './identity';
@@ -211,7 +213,7 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
     private abortController: AbortController;
 
     private myIdentity: PersonalIdentity;
-    private peerIdentity: Identity;
+    private peerIdentity: string;
     private keyState: KeyState | null;
 
     public state: OTRChannelState;
@@ -219,7 +221,7 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
     constructor (
         gateway: GatewayConnection,
         myIdentity: PersonalIdentity,
-        peerIdentity: Identity,
+        peerIdentity: string,
         connectionID: string,
         initiating: boolean
     ) {
@@ -430,13 +432,18 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
     ): Promise<number> {
         const decryptedX = await decryptWithCounterZero(c, encryptedSignature);
         const [peerPublicKeyBytes, peerKeyid, mbSignature] = decode(schemas.SIGNATURE_X, decryptedX);
-        if (!buffersEqual(peerPublicKeyBytes, this.peerIdentity.rawPublicKey)) throw new Error('Wrong public key');
+
+        const peerIdentityFingerprint = toByteArray(this.peerIdentity);
+        const givenPeerIdentity = await Identity.fromPublicKey(peerPublicKeyBytes);
+        if (!buffersEqual(peerIdentityFingerprint, givenPeerIdentity.publicKeyFingerprint)) {
+            throw new Error('Wrong public key');
+        }
 
         // TODO: should we verify keyid somehow?
         const sigData = encode(schemas.SIGNATURE_DATA, [gxBytes, gyBytes, peerPublicKeyBytes, peerKeyid]);
         const mb = await crypto.subtle.sign({name: 'HMAC', hash: 'SHA-256'}, m1, sigData);
 
-        const mbSignatureValid = await this.peerIdentity.verify(mb, mbSignature);
+        const mbSignatureValid = await givenPeerIdentity.verify(mb, mbSignature);
         if (!mbSignatureValid) throw new Error('mb signature invalid');
 
         const macSignatureValid = await crypto.subtle.verify('HMAC', m2, signatureMAC, encryptedSignature);

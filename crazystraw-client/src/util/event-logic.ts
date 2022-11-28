@@ -45,7 +45,7 @@ const setupEventLogic = (store: AppState): () => void => {
             const requestStateSignal = signal(request.state);
             store.incomingRequests.value = {
                 ...oldIncomingRequests,
-                [request.peerIdentityString]: {
+                [request.peerIdentity]: {
                     request,
                     state: requestStateSignal
                 }};

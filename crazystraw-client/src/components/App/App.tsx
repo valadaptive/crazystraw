@@ -14,7 +14,6 @@ import createProfileAction from '../../actions/create-profile';
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
 import {OutgoingPeerRequest} from '../../rtc/peer-request';
-import {Identity} from '../../rtc/identity';
 import {OTRChannelState} from '../../rtc/otr';
 
 const App = (): JSX.Element => {
@@ -36,11 +35,9 @@ const App = (): JSX.Element => {
     const [peerIdentityString, setPeerIdentityString] = useState('');
 
     const gateway = gatewayConnection.value?.connection;
-    const connect = async (): Promise<void> => {
+    const connect = (): void => {
         if (!gateway) return;
-        const peerIdentity = await Identity.fromPublicKeyString(peerIdentityString);
-        console.log(peerIdentity);
-        const connection = gateway.makePeerRequest(peerIdentity);
+        const connection = gateway.makePeerRequest(peerIdentityString);
         console.log(connection);
         connection.addEventListener('connect', event => {
             const {channel} = event;

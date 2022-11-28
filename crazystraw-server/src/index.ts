@@ -76,7 +76,7 @@ class WrappedSocket extends EventEmitter {
 
 type ChallengeState = {
     publicKey: CryptoKey,
-    publicKeyString: string,
+    identity: string,
     challenge: Buffer,
     for: number,
     timeout: NodeJS.Timeout
@@ -84,7 +84,7 @@ type ChallengeState = {
 
 type AuthenticatedConnectionData = {
     publicKey: CryptoKey,
-    publicKeyString: string
+    identity: string
 };
 
 class Gateway {
@@ -131,17 +131,18 @@ class Gateway {
                     return;
                 }
 
-                if (this.connectionsByIdentity.has(message.publicKey)) {
+                if (this.connectionsByIdentity.has(message.identity)) {
                     ws.socket.close(GatewayCloseCode.EXISTING_SESSION, 'Another session is already active');
                     return;
                 }
 
+                const publicKeyBuffer = Buffer.from(message.publicKey, 'base64');
                 // Decode public key from message
                 let publicKey;
                 try {
                     publicKey = await subtle.importKey(
                         'raw',
-                        Buffer.from(message.publicKey, 'base64'),
+                        publicKeyBuffer,
                         {name: 'ECDSA', namedCurve: 'P-256'},
                         true,
                         ['verify']
@@ -150,6 +151,13 @@ class Gateway {
                     ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid public key format');
                     return;
                 }
+
+                const fingerprint = Buffer.from(await subtle.digest('SHA-256', publicKeyBuffer), 0, 16);
+                const givenFingerprint = Buffer.from(message.identity, 'base64');
+                if (!fingerprint.equals(givenFingerprint)) {
+                    ws.socket.close(GatewayCloseCode.CHALLENGE_FAILED, 'Public key does not match fingerprint');
+                }
+
 
                 // Issue a challenge to the client to make sure they actually own the corresponding private key
                 const challenge = randomBytes(16);
@@ -163,7 +171,7 @@ class Gateway {
 
                 this.waitingChallenges.set(ws, {
                     publicKey,
-                    publicKeyString: message.publicKey,
+                    identity: message.identity,
                     challenge,
                     for: challengeSeq,
                     timeout: setTimeout(() => {
@@ -203,12 +211,12 @@ class Gateway {
                     if (isValid) {
                         this.authenticatedConnections.set(ws, {
                             publicKey: waitingChallenge.publicKey,
-                            publicKeyString: waitingChallenge.publicKeyString
+                            identity: waitingChallenge.identity
                         });
-                        this.connectionsByIdentity.set(waitingChallenge.publicKeyString, ws);
+                        this.connectionsByIdentity.set(waitingChallenge.identity, ws);
                         ws.socket.once('close', () => {
                             this.authenticatedConnections.delete(ws);
-                            this.connectionsByIdentity.delete(waitingChallenge.publicKeyString);
+                            this.connectionsByIdentity.delete(waitingChallenge.identity);
                         });
 
                         await ws.send({
@@ -247,7 +255,7 @@ class Gateway {
 
                 await peerConnection.send({
                     type: GatewayMessageType.GOT_PEER_REQUEST,
-                    peerIdentity: auth.publicKeyString,
+                    peerIdentity: auth.identity,
                     connectionID: message.connectionID
                 });
 

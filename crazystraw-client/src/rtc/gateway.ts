@@ -10,7 +10,7 @@ import {
     ChallengeSuccessMessage
 } from 'crazystraw-common/ws-types';
 
-import {Identity, PersonalIdentity} from './identity';
+import {PersonalIdentity} from './identity';
 import {IncomingPeerRequest, OutgoingPeerRequest} from './peer-request';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
@@ -88,18 +88,16 @@ GatewayConnectionMessageEvent
         };
         this.ws.addEventListener('close', onClose);
 
-        const onMessage = async (event: MessageEvent): Promise<void> => {
+        const onMessage = (event: MessageEvent): void => {
             try {
                 const message = JSON.parse(event.data as string) as ServerMessage;
 
                 this.dispatchEvent(new GatewayConnectionMessageEvent(message));
 
                 if (message.type === GatewayMessageType.GOT_PEER_REQUEST) {
-                    const peerIdentity = await Identity.fromPublicKeyString(message.peerIdentity);
                     this.dispatchEvent(new GatewayConnectionPeerRequestEvent(new IncomingPeerRequest(
                         this,
                         identity,
-                        peerIdentity,
                         message.peerIdentity,
                         message.connectionID
                     )));
@@ -113,11 +111,11 @@ GatewayConnectionMessageEvent
         const onOpen = async (): Promise<void> => {
             this.dispatchEvent(new GatewayConnectionStateChangeEvent({
                 type: GatewayConnectionStateType.AUTHENTICATING}));
-            const identifyMessage = {
+            const identifySeq = this.send({
                 type: GatewayMessageType.IDENTIFY,
-                publicKey: fromByteArray(identity.rawPublicKey)
-            } as const;
-            const identifySeq = this.send(identifyMessage);
+                publicKey: fromByteArray(identity.rawPublicKey),
+                identity: identity.toBase64()
+            });
             try {
                 const challengeMessage = (await this.waitFor(
                     (message): message is ChallengeMessage =>
@@ -179,7 +177,7 @@ GatewayConnectionMessageEvent
         this.ws.close();
     }
 
-    makePeerRequest (peerIdentity: Identity): OutgoingPeerRequest {
+    makePeerRequest (peerIdentity: string): OutgoingPeerRequest {
         return new OutgoingPeerRequest(this, this.identity, peerIdentity);
     }
 }
