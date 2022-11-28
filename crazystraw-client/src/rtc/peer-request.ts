@@ -1,8 +1,8 @@
 import {GatewayMessageType} from 'crazystraw-common/ws-types';
 
-import {RTCChannel, RTCChannelState} from './channel';
 import {GatewayConnection, GatewayConnectionMessageEvent} from './gateway';
-import {Identity} from './identity';
+import {Identity, PersonalIdentity} from './identity';
+import {OTRChannel, OTRChannelState} from './otr';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
 
@@ -42,8 +42,8 @@ class OutgoingPeerRequestAbortEvent extends TypedEvent<'abort'> {
 }
 
 class OutgoingPeerRequestConnectEvent extends TypedEvent<'connect'> {
-    public channel: RTCChannel;
-    constructor (channel: RTCChannel) {
+    public channel: OTRChannel;
+    constructor (channel: OTRChannel) {
         super('connect');
         this.channel = channel;
     }
@@ -60,7 +60,7 @@ OutgoingPeerRequestStateChangeEvent
     private peerIdentity: Identity;
     private gateway: GatewayConnection;
     private connectionID: string;
-    private channel: RTCChannel | undefined;
+    private channel: OTRChannel | undefined;
     private abortController: AbortController;
 
     private setState (newState: OutgoingPeerRequestState): void {
@@ -68,7 +68,7 @@ OutgoingPeerRequestStateChangeEvent
         this.dispatchEvent(new IncomingPeerRequestStateChangeEvent());
     }
 
-    constructor (gateway: GatewayConnection, peerIdentity: Identity) {
+    constructor (gateway: GatewayConnection, myIdentity: PersonalIdentity, peerIdentity: Identity) {
         super();
 
         this.state = OutgoingPeerRequestState.PENDING;
@@ -100,18 +100,18 @@ OutgoingPeerRequestStateChangeEvent
                 this.setState(OutgoingPeerRequestState.ACCEPTED);
                 this.gateway.removeEventListener('message', onMessage);
                 // peer request accepted-- set up RTC channel
-                const channel = new RTCChannel(this.gateway, this.peerIdentity, this.connectionID, false);
+                const channel = new OTRChannel(this.gateway, myIdentity, this.peerIdentity, this.connectionID, true);
                 this.channel = channel;
 
                 const onChannelStateChange = (): void => {
                     switch (channel.state) {
-                        case RTCChannelState.CONNECTED: {
+                        case OTRChannelState.CONNECTED: {
                             this.setState(OutgoingPeerRequestState.CONNECTED);
                             this.dispatchEvent(new OutgoingPeerRequestConnectEvent(channel));
                             this.abortController.abort();
                             break;
                         }
-                        case RTCChannelState.CLOSED: {
+                        case OTRChannelState.CLOSED: {
                             this.setState(OutgoingPeerRequestState.WEBRTC_FAILED);
                             this.abortController.abort();
                             break;
@@ -155,7 +155,7 @@ export const enum IncomingPeerRequestState {
     REJECTED,
     /** The peer cancelled the request. */
     CANCELLED,
-    /** WebRTC could not connect. */
+    /** WebRTC could not connect. TODO: rename because this fires on OTR auth failures too */
     WEBRTC_FAILED
 }
 
@@ -166,8 +166,8 @@ class IncomingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
 }
 
 class IncomingPeerRequestConnectEvent extends TypedEvent<'connect'> {
-    public channel: RTCChannel;
-    constructor (channel: RTCChannel) {
+    public channel: OTRChannel;
+    constructor (channel: OTRChannel) {
         super('connect');
         this.channel = channel;
     }
@@ -181,19 +181,22 @@ IncomingPeerRequestConnectEvent
     public peerIdentityString: string;
 
     private gateway: GatewayConnection;
+    private myIdentity: PersonalIdentity;
     private peerIdentity: Identity;
     private connectionID: string;
-    private channel: RTCChannel | undefined;
+    private channel: OTRChannel | undefined;
     private abortController: AbortController;
 
     constructor (
         gateway: GatewayConnection,
+        myIdentity: PersonalIdentity,
         peerIdentity: Identity,
         peerIdentityString: string,
         connectionID: string
     ) {
         super();
         this.gateway = gateway;
+        this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
         this.peerIdentityString = peerIdentityString;
         this.state = IncomingPeerRequestState.PENDING;
@@ -230,19 +233,19 @@ IncomingPeerRequestConnectEvent
                 peerIdentity: this.peerIdentityString,
                 connectionID: this.connectionID
             });
-            const channel = new RTCChannel(this.gateway, this.peerIdentity, this.connectionID, true);
+            const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, false);
             this.channel = channel;
             this.setState(IncomingPeerRequestState.ACCEPTED);
 
             const onChannelStateChange = (): void => {
                 switch (channel.state) {
-                    case RTCChannelState.CONNECTED: {
+                    case OTRChannelState.CONNECTED: {
                         this.setState(IncomingPeerRequestState.CONNECTED);
                         this.dispatchEvent(new IncomingPeerRequestConnectEvent(channel));
                         this.abortController.abort();
                         break;
                     }
-                    case RTCChannelState.CLOSED: {
+                    case OTRChannelState.CLOSED: {
                         this.setState(IncomingPeerRequestState.WEBRTC_FAILED);
                         this.abortController.abort();
                         break;

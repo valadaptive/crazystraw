@@ -15,6 +15,7 @@ import {useAppState, useAction, ProfileState} from '../../util/state';
 
 import {OutgoingPeerRequest} from '../../rtc/peer-request';
 import {Identity} from '../../rtc/identity';
+import {OTRChannelState} from '../../rtc/otr';
 
 const App = (): JSX.Element => {
     const {profile, savedProfile, profileState, gatewayConnection} = useAppState();
@@ -39,7 +40,12 @@ const App = (): JSX.Element => {
         if (!gateway) return;
         const peerIdentity = await Identity.fromPublicKeyString(peerIdentityString);
         console.log(peerIdentity);
-        new OutgoingPeerRequest(gateway, peerIdentity);
+        const connection = gateway.makePeerRequest(peerIdentity);
+        console.log(connection);
+        connection.addEventListener('connect', event => {
+            const {channel} = event;
+            void channel.sendMessage(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0xaa]).buffer);
+        }, {once: true});
     };
 
     console.log(profile.value?.identity.toBase64());

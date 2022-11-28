@@ -64,6 +64,7 @@ GatewayConnectionMessageEvent
 > {
     private ws: WebSocket;
     private seq: number;
+    private identity: PersonalIdentity;
 
     public state: GatewayConnectionState;
 
@@ -71,6 +72,8 @@ GatewayConnectionMessageEvent
         super();
         this.ws = new WebSocket(serverURL);
         this.seq = 0;
+        this.identity = identity;
+
         this.state = {type: GatewayConnectionStateType.CONNECTING};
 
         // TODO: allow gateway to reconnect?
@@ -95,6 +98,7 @@ GatewayConnectionMessageEvent
                     const peerIdentity = await Identity.fromPublicKeyString(message.peerIdentity);
                     this.dispatchEvent(new GatewayConnectionPeerRequestEvent(new IncomingPeerRequest(
                         this,
+                        identity,
                         peerIdentity,
                         message.peerIdentity,
                         message.connectionID
@@ -175,7 +179,7 @@ GatewayConnectionMessageEvent
         this.ws.close();
     }
 
-    createConnection (peerIdentity: Identity): OutgoingPeerRequest {
-        return new OutgoingPeerRequest(this, peerIdentity);
+    makePeerRequest (peerIdentity: Identity): OutgoingPeerRequest {
+        return new OutgoingPeerRequest(this, this.identity, peerIdentity);
     }
 }

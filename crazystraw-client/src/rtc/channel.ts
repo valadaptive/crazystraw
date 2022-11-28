@@ -201,7 +201,7 @@ RTCChannelMessageEvent
                 const dv = new DataView(message);
                 const messageIndex = dv.getUint16(0, true);
                 const totalMessageSize = dv.getUint32(2, true);
-    
+
                 if (messageIndex === 0) {
                     if (currentMessageChunks !== null) throw new Error('Previous message not cleared yet');
                     currentMessageTotalSize = totalMessageSize;
@@ -213,7 +213,7 @@ RTCChannelMessageEvent
                         const maxMessageSize = message.byteLength;
                         currentMessageChunkSize = maxMessageSize - RTCChannel.HEADER_SIZE;
                         currentMessageNumChunks = Math.ceil(totalMessageSize / currentMessageChunkSize);
-    
+
                         currentMessageChunks = [new Uint8Array(message, RTCChannel.HEADER_SIZE)];
                     }
                 } else {
@@ -224,9 +224,9 @@ RTCChannelMessageEvent
                     if (currentMessageTotalSize !== totalMessageSize) {
                         throw new Error('Message size disagrees with previous given size');
                     }
-    
+
                     currentMessageChunks.push(new Uint8Array(message, RTCChannel.HEADER_SIZE));
-    
+
                     if (currentMessageChunks.length === currentMessageNumChunks) {
                         // TODO: allow negotiation of max message size at this layer to prevent denial of service by
                         // using up all memory

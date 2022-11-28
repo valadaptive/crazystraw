@@ -44,7 +44,7 @@ const resizeAvatar = async (image: Blob): Promise<Blob> => {
                     if (blob) {
                         resolve(blob);
                     } else {
-                        reject('Could not create blob');
+                        reject(new Error('Could not create blob'));
                     }
                 // I know WebP sucks but it's significantly smaller than PNG
                 }, 'image/webp', 1);
