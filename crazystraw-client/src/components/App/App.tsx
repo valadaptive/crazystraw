@@ -44,7 +44,7 @@ const App = (): JSX.Element => {
         console.log(connection);
         connection.addEventListener('connect', event => {
             const {channel} = event;
-            void channel.sendMessage(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0xaa]).buffer);
+            void channel.sendMessage(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0xaa]).buffer).catch(console.error);
         }, {once: true});
     };
 
