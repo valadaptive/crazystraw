@@ -6,31 +6,7 @@ import {Identity, PersonalIdentity} from './identity';
 import {encode, decode, DataType} from './otr-encoding';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
-
-const enum MessageType {
-    DH_COMMIT,
-    DH_KEY,
-    REVEAL_SIGNATURE,
-    SIGNATURE,
-    DATA
-}
-
-type CommitData = {
-    x: KeyPairWithBytes,
-    r: CryptoKey
-};
-
-type SharedStatePerSide = {
-    c: CryptoKey,
-    m1: CryptoKey,
-    m2: CryptoKey
-};
-
-type SharedInitialState = {
-    ssid: ArrayBuffer,
-    initiator: SharedStatePerSide,
-    receiver: SharedStatePerSide
-};
+import toError from '../util/to-error';
 
 const encryptWithCounterZero = (key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer> =>
     crypto.subtle.encrypt({name: 'AES-CTR', counter: new Uint8Array(16), length: 64}, key, data);
@@ -93,6 +69,14 @@ const ECDH_PARAMS = {name: 'ECDH', namedCurve: 'P-256'} as const;
 const ECDH_PUBKEY_SIZE = 65;
 const MAC_SIZE = 32;
 
+const enum MessageType {
+    DH_COMMIT,
+    DH_KEY,
+    REVEAL_SIGNATURE,
+    SIGNATURE,
+    DATA
+}
+
 const schemas = {
     DH_COMMIT: [
         {type: DataType.BYTE},
@@ -149,6 +133,24 @@ class OTRChannelStateChangeEvent extends TypedEvent<'statechange'> {
     }
 }
 
+class OTRChannelMessageEvent extends TypedEvent<'message'> {
+    public data: ArrayBuffer;
+    oldMACKeys: ArrayBuffer[];
+    constructor (data: ArrayBuffer, oldMACKeys: ArrayBuffer[]) {
+        super('message');
+        this.data = data;
+        this.oldMACKeys = oldMACKeys;
+    }
+}
+
+class OTRChannelMessageErrorEvent extends TypedEvent<'messageerror'> {
+    public error: Error;
+    constructor (error: unknown) {
+        super('messageerror');
+        this.error = toError(error);
+    }
+}
+
 export const enum OTRChannelState {
     /** The connection is being initialized. */
     CONNECTING,
@@ -161,6 +163,23 @@ export const enum OTRChannelState {
     /** The connection has been closed, possibly due to an error. */
     CLOSED
 }
+
+type CommitData = {
+    x: KeyPairWithBytes,
+    r: CryptoKey
+};
+
+type SharedStatePerSide = {
+    c: CryptoKey,
+    m1: CryptoKey,
+    m2: CryptoKey
+};
+
+type SharedInitialState = {
+    ssid: ArrayBuffer,
+    initiator: SharedStatePerSide,
+    receiver: SharedStatePerSide
+};
 
 type KeyWithBytes = {
     publicKey: CryptoKey,
@@ -207,7 +226,11 @@ type SessionKeyState = {
 };
 
 // https://otr.cypherpunks.ca/Protocol-v2-3.1.0.html
-export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
+export class OTRChannel extends TypedEventTarget<
+OTRChannelStateChangeEvent |
+OTRChannelMessageEvent |
+OTRChannelMessageErrorEvent
+> {
     private rtcChannel: RTCChannel;
     // TODO: use this when implementing close()
     private abortController: AbortController;
@@ -217,6 +240,7 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
     private keyState: KeyState | null;
 
     public state: OTRChannelState;
+    public closeReason: Error | null;
 
     constructor (
         gateway: GatewayConnection,
@@ -237,6 +261,7 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
         this.keyState = null;
 
         this.state = OTRChannelState.CONNECTING;
+        this.closeReason = null;
 
         void this.connect(initiating);
     }
@@ -246,8 +271,9 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
         this.dispatchEvent(new OTRChannelStateChangeEvent());
     }
 
-    public close (): void {
+    public close (error?: Error): void {
         this.abortController.abort();
+        if (error) this.closeReason = error;
         this.setState(OTRChannelState.CLOSED);
     }
 
@@ -275,26 +301,25 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
             });
 
             this.setState(OTRChannelState.AUTHENTICATING);
-            console.log('authenticating');
             if (initiating) {
                 await this.initiateKeyExchange();
             } else {
                 await this.waitForKeyExchange();
             }
-            console.log('authenticated');
             this.setState(OTRChannelState.CONNECTED);
 
-            this.rtcChannel.addEventListener('message', ({message}) => {
-                console.log(message);
+            this.rtcChannel.addEventListener('message', async ({message}) => {
                 const dv = new DataView(message);
                 if (dv.getUint8(0) === MessageType.DATA) {
-                    // TODO: handle errors
-                    void this.onMessage(message).catch(console.error);
+                    try {
+                        await this.onMessage(message);
+                    } catch (err) {
+                        this.dispatchEvent(new OTRChannelMessageErrorEvent(err));
+                    }
                 }
             }, {signal: this.abortController.signal});
         } catch (err) {
-            console.error(err);
-            this.close();
+            this.close(toError(err));
         }
     }
 
@@ -340,7 +365,6 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
         const myKeyid = 1;
         await this.sendRevealSignatureMessage(sharedState, x.publicKeyBytes, gyBytes, myKeyid, r);
 
-        console.log('awaiting sig');
         const signatureMessage = await this.expectNextMessage(MessageType.SIGNATURE);
         const [, encryptedXa, signatureMAC] = decode(schemas.SIGNATURE, signatureMessage);
 
@@ -604,53 +628,61 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
         if (this.keyState.sessionKeys.myPreviousPeerPrevious)
             this.revealMACs(this.keyState.sessionKeys.myPreviousPeerPrevious);
 
-        // Move current -> previous
-        this.keyState.myPreviousKey = this.keyState.myCurrentKey;
-        this.keyState.sessionKeys.myPreviousPeerCurrent = this.keyState.sessionKeys.myCurrentPeerCurrent;
-        this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myCurrentPeerPrevious;
-
         const nextKey = await generateKeyPair();
-        this.keyState.myCurrentKey = nextKey;
-        // Generate new session keys
-        this.keyState.sessionKeys.myCurrentPeerCurrent =
-            await this.generateSessionKeys(nextKey, this.keyState.peerCurrentKey);
-        this.keyState.sessionKeys.myCurrentPeerPrevious =
-            this.keyState.peerPreviousKey ?
-                await this.generateSessionKeys(nextKey, this.keyState.peerPreviousKey) :
-                null;
+
+        try {
+            // Move current -> previous
+            this.keyState.myPreviousKey = this.keyState.myCurrentKey;
+            this.keyState.sessionKeys.myPreviousPeerCurrent = this.keyState.sessionKeys.myCurrentPeerCurrent;
+            this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myCurrentPeerPrevious;
+
+            this.keyState.myCurrentKey = nextKey;
+            // Generate new session keys
+            this.keyState.sessionKeys.myCurrentPeerCurrent =
+                await this.generateSessionKeys(nextKey, this.keyState.peerCurrentKey);
+            this.keyState.sessionKeys.myCurrentPeerPrevious =
+                this.keyState.peerPreviousKey ?
+                    await this.generateSessionKeys(nextKey, this.keyState.peerPreviousKey) :
+                    null;
+        } catch (err) {
+            // Avoid inconsistent key state
+            this.keyState = null;
+            this.close();
+        }
     }
 
     private async rotatePeerKeys (nextKeyBytes: ArrayBuffer): Promise<void> {
         if (!this.keyState) throw new Error('Not yet authenticated');
 
         const nextKey = await importDHPublicKey(nextKeyBytes);
-        // Move current -> previous
-        this.keyState.peerPreviousKey = this.keyState.peerCurrentKey;
+        try {
+            // Move current -> previous
+            this.keyState.peerPreviousKey = this.keyState.peerCurrentKey;
 
-        if (this.keyState.sessionKeys.myCurrentPeerPrevious)
-            this.revealMACs(this.keyState.sessionKeys.myCurrentPeerPrevious);
-        if (this.keyState.sessionKeys.myPreviousPeerPrevious)
-            this.revealMACs(this.keyState.sessionKeys.myPreviousPeerPrevious);
+            if (this.keyState.sessionKeys.myCurrentPeerPrevious)
+                this.revealMACs(this.keyState.sessionKeys.myCurrentPeerPrevious);
+            if (this.keyState.sessionKeys.myPreviousPeerPrevious)
+                this.revealMACs(this.keyState.sessionKeys.myPreviousPeerPrevious);
 
-        this.keyState.sessionKeys.myCurrentPeerPrevious = this.keyState.sessionKeys.myCurrentPeerCurrent;
-        this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myPreviousPeerCurrent;
+            this.keyState.sessionKeys.myCurrentPeerPrevious = this.keyState.sessionKeys.myCurrentPeerCurrent;
+            this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myPreviousPeerCurrent;
 
-        this.keyState.peerCurrentKey = nextKey;
-        // Generate new session keys
-        this.keyState.sessionKeys.myCurrentPeerCurrent =
-            await this.generateSessionKeys(this.keyState.myCurrentKey, nextKey);
-        this.keyState.sessionKeys.myPreviousPeerCurrent =
-            await this.generateSessionKeys(this.keyState.myPreviousKey, nextKey);
+            this.keyState.peerCurrentKey = nextKey;
+            // Generate new session keys
+            this.keyState.sessionKeys.myCurrentPeerCurrent =
+                await this.generateSessionKeys(this.keyState.myCurrentKey, nextKey);
+            this.keyState.sessionKeys.myPreviousPeerCurrent =
+                await this.generateSessionKeys(this.keyState.myPreviousKey, nextKey);
+        } catch (err) {
+            // Avoid inconsistent key state
+            this.keyState = null;
+            this.close();
+        }
     }
 
     public async sendMessage (data: ArrayBuffer): Promise<void> {
         if (!this.keyState) throw new Error('Not yet authenticated');
         const sessionKey = this.keyState.sessionKeys.myPreviousPeerCurrent;
-
-        console.log(
-            new Uint32Array(sessionKey.sendingKey.aesKeyBytes),
-            new Uint32Array(sessionKey.sendingKey.macKeyBytes)
-        );
 
         const counter = ++sessionKey.sendingKey.counter;
 
@@ -680,7 +712,6 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
             savedMACArr.set(new Uint8Array(macKeyBytes), offset);
             offset += MAC_SIZE;
         }
-        this.keyState.savedMACKeys.length = 0;
 
         const fullData = encode(schemas.DATA_MESSAGE, [
             MessageType.DATA,
@@ -690,11 +721,13 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
         ]);
 
         this.rtcChannel.send(fullData);
+        // don't clear saved MAC keys until message sends successfully
+        this.keyState.savedMACKeys.length = 0;
     }
 
     private async onMessage (message: ArrayBuffer): Promise<void> {
         if (!this.keyState) throw new Error('Not yet authenticated');
-        const [, inner, hmac, oldMACKeys] = decode(schemas.DATA_MESSAGE, message);
+        const [, inner, hmac, oldMACKeysBlock] = decode(schemas.DATA_MESSAGE, message);
         const [senderKeyid, recipientKeyid, senderNextKeyBytes, counter, encryptedData] =
             decode(schemas.DATA_MESSAGE_INNER, inner);
 
@@ -722,11 +755,6 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
             throw new Error('Sender key too old');
         }
 
-        console.log(
-            new Uint32Array(sessionKey.receivingKey.aesKeyBytes),
-            new Uint32Array(sessionKey.receivingKey.macKeyBytes)
-        );
-
         const verified = await crypto.subtle.verify('HMAC', sessionKey.receivingKey.macKey, hmac, inner);
         if (!verified) throw new Error('HMAC verification failed');
         sessionKey.receivingKey.macKeyUsed = true;
@@ -748,7 +776,12 @@ export class OTRChannel extends TypedEventTarget<OTRChannelStateChangeEvent> {
             await this.rotatePeerKeys(senderNextKeyBytes);
         }
 
-        console.log(decryptedMessage);
+        const oldMACKeys = [];
+        for (let i = 0; i < oldMACKeysBlock.byteLength; i += MAC_SIZE) {
+            oldMACKeys.push(oldMACKeysBlock.slice(i, i + MAC_SIZE));
+        }
+
+        this.dispatchEvent(new OTRChannelMessageEvent(decryptedMessage, oldMACKeys));
     }
 
     private async generateSessionKeys (

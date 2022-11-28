@@ -60,7 +60,6 @@ OutgoingPeerRequestStateChangeEvent
     private peerIdentity: string;
     private gateway: GatewayConnection;
     private connectionID: string;
-    private channel: OTRChannel | undefined;
     private abortController: AbortController;
 
     private setState (newState: OutgoingPeerRequestState): void {
@@ -101,7 +100,6 @@ OutgoingPeerRequestStateChangeEvent
                 this.gateway.removeEventListener('message', onMessage);
                 // peer request accepted-- set up RTC channel
                 const channel = new OTRChannel(this.gateway, myIdentity, this.peerIdentity, this.connectionID, true);
-                this.channel = channel;
 
                 const onChannelStateChange = (): void => {
                     switch (channel.state) {
@@ -183,7 +181,6 @@ IncomingPeerRequestConnectEvent
     private gateway: GatewayConnection;
     private myIdentity: PersonalIdentity;
     private connectionID: string;
-    private channel: OTRChannel | undefined;
     private abortController: AbortController;
 
     constructor (
@@ -231,7 +228,6 @@ IncomingPeerRequestConnectEvent
                 connectionID: this.connectionID
             });
             const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, false);
-            this.channel = channel;
             this.setState(IncomingPeerRequestState.ACCEPTED);
 
             const onChannelStateChange = (): void => {
