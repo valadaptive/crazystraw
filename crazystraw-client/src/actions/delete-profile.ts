@@ -2,11 +2,11 @@ import {batch} from '@preact/signals';
 
 import {AppState, ProfileState} from '../util/state';
 
-const deleteProfile = (state: AppState): void => {
+const deleteProfile = (store: AppState): void => {
     batch(() => {
-        state.profileState.value = ProfileState.NONEXISTENT;
-        state.savedProfile.value = null;
-        state.profile.value = null;
+        store.profileState.value = ProfileState.NONEXISTENT;
+        store.savedProfile.value = null;
+        store.profile.value = null;
     });
 };
 

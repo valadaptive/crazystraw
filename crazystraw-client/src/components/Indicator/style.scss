@@ -1,27 +1,34 @@
-.indicator {
-    border-radius: 50%;
+@use '../../colors.scss' as col;
+
+.indicator-wrapper {
     display: inline-block;
     vertical-align: middle;
+    overflow: hidden;
+}
+
+.indicator {
     box-sizing: border-box;
+    border-radius: 50%;
+    display: flex;
 
     &.disabled {
-        border-color: rgb(113, 107, 130);
+        border-color: col.$interactive-normal;
         border-style: solid;
     }
 
     &.failed {
-        background-color: rgb(206, 40, 53);
+        background-color: col.$red;
     }
 
     &.loading {
-        border-color: rgb(238, 179, 49);
+        border-color: col.$yellow;
         border-style: solid;
         animation: 1s linear infinite spin;
         border-bottom-color: transparent;
     }
 
     &.success {
-        background-color: rgb(16, 174, 106);
+        background-color: col.$green;
     }
 }
 

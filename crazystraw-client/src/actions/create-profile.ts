@@ -5,7 +5,7 @@ import {PersonalProfile} from '../rtc/profile';
 import {AppState, ProfileState} from '../util/state';
 
 const createProfile = async (
-    state: AppState,
+    store: AppState,
     profileData: {
         handle: string,
         avatar: Blob | null,
@@ -13,19 +13,19 @@ const createProfile = async (
     },
     password: string
 ): Promise<void> => {
-    state.profileState.value = ProfileState.GENERATING;
+    store.profileState.value = ProfileState.GENERATING;
 
     try {
         const identity = await PersonalIdentity.generate();
         const profile = new PersonalProfile(identity, profileData.handle, profileData.avatar, profileData.bio);
         const exportedProfile = await profile.export(password);
         batch(() => {
-            state.profileState.value = ProfileState.LOADED;
-            state.savedProfile.value = exportedProfile;
-            state.profile.value = profile;
+            store.profileState.value = ProfileState.LOADED;
+            store.savedProfile.value = exportedProfile;
+            store.profile.value = profile;
         });
     } catch (err) {
-        state.profileState.value = ProfileState.NONEXISTENT;
+        store.profileState.value = ProfileState.NONEXISTENT;
     }
 };
 

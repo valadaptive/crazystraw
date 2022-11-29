@@ -13,21 +13,17 @@ export const enum IndicatorState {
 const Indicator = ({state, size}: {state: IndicatorState, size: number | string}): JSX.Element => {
     const cssSize = typeof size === 'string' ? size : `${size}px`;
 
-    const inlineStyle: JSX.DOMCSSProperties = {
-        width: cssSize,
-        height: cssSize,
-        borderWidth: `calc(${cssSize} / 4)`
-    };
-
-    return <div className={classNames(
-        style.indicator,
-        {
-            [style.disabled]: state === IndicatorState.DISABLED,
-            [style.failed]: state === IndicatorState.FAILED,
-            [style.loading]: state === IndicatorState.LOADING,
-            [style.success]: state === IndicatorState.SUCCESS
-        })
-    } style={inlineStyle as JSX.CSSProperties} />;
+    return <div className={style.indicatorWrapper} style={{width: cssSize, height: cssSize}}>
+        <div className={classNames(
+            style.indicator,
+            {
+                [style.disabled]: state === IndicatorState.DISABLED,
+                [style.failed]: state === IndicatorState.FAILED,
+                [style.loading]: state === IndicatorState.LOADING,
+                [style.success]: state === IndicatorState.SUCCESS
+            })
+        } style={{width: cssSize, height: cssSize, borderWidth: `calc(${cssSize} / 4)`}} />
+    </div>;
 };
 
 export default Indicator;

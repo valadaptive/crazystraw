@@ -1,8 +1,10 @@
 import {signal, effect} from '@preact/signals';
 
-import {AppState} from './state';
+import type {AppState} from './state';
 
 import {GatewayConnection, GatewayConnectionStateChangeEvent} from '../rtc/gateway';
+
+import connectIncomingPeerRequest from '../event-binding/incoming-peer-request';
 
 const CONNECTION_SERVER = 'ws://localhost:9876';
 
@@ -39,20 +41,12 @@ const setupEventLogic = (store: AppState): () => void => {
         const connection = store.gatewayConnection.value?.connection;
         if (!connection) return;
         connection.addEventListener('peerrequest', event => {
-            console.log(event);
             const {request} = event;
             const oldIncomingRequests = store.incomingRequests.value;
-            const requestStateSignal = signal(request.state);
             store.incomingRequests.value = {
                 ...oldIncomingRequests,
-                [request.peerIdentity]: {
-                    request,
-                    state: requestStateSignal
-                }};
-
-            request.addEventListener('statechange', () => {
-                requestStateSignal.value = request.state;
-            });
+                [request.peerIdentity]: connectIncomingPeerRequest(store, request)
+            };
         });
     }));
 

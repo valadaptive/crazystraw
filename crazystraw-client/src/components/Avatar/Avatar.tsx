@@ -7,15 +7,18 @@ import useBlobURL from '../../util/use-blob-url';
 import defaultAvatar from '../../assets/default-avatar.svg';
 
 const Avatar = ({size, data}: {
+    /** Image dimensions. */
     size: number,
-    data: Blob | null
+    /** Blob containing image data, data URI, or null for default avatar. */
+    data: Blob | string | null
 }): JSX.Element => {
-    const avatarURL = useBlobURL(data);
+    const avatarURL = useBlobURL(typeof data === 'string' ? null : data);
+    const avatarURI = typeof data === 'string' ? data : avatarURL;
 
     return (
         <img
             className={style.avatar}
-            src={avatarURL ?? defaultAvatar}
+            src={avatarURI ?? defaultAvatar}
             width={size}
             height={size}
         />

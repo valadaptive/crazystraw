@@ -189,6 +189,7 @@ GatewayConnectionMessageEvent
         ws.addEventListener('open', this.handleOpen.bind(this, ws, {once: true, signal}));
         ws.addEventListener('message', this.handleMessage.bind(this, ws), {signal});
         ws.addEventListener('close', this.handleClose.bind(this, abortController), {once: true, signal});
+        this.ws = ws;
     }
 
     private waitFor<T extends ServerMessage> (
@@ -222,10 +223,10 @@ GatewayConnectionMessageEvent
             };
             ws.addEventListener('close', onClose, {once: true});
 
-            const timeoutHandler = setTimeout(() => {
+            const timeoutHandler = timeout > 0 ? setTimeout(() => {
                 clearHandlers();
                 reject(SOCKET_CLOSED);
-            }, timeout);
+            }, timeout) : undefined;
 
             const clearHandlers = (): void => {
                 this.removeEventListener('message', onMessage);
@@ -277,7 +278,7 @@ GatewayConnectionMessageEvent
                 message.type === GatewayMessageType.PEER_REQUEST_REJECTED ||
                 message.type === GatewayMessageType.PEER_OFFLINE
             ) && message.for === seq,
-            10000,
+            0,
             signal
         );
 

@@ -176,7 +176,7 @@ export class PersonalIdentity extends Identity {
             keyPair.publicKey,
             keyPair.privateKey,
             new Uint8Array(rawPublicKey),
-            new Uint8Array(fingerprint)
+            new Uint8Array(fingerprint.slice(0, 16))
         );
     }
 }

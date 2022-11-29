@@ -4,65 +4,264 @@ import type {JSX} from 'preact';
 import {useMemo} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 
-import {useAppState, useAction, Contact} from '../../util/state';
-import useKey from '../../util/use-key';
-import {IncomingPeerRequest, IncomingPeerRequestState} from '../../rtc/peer-request';
+import {useAppState, Contact} from '../../util/state';
+import fingerprintIcon from '../../util/digesticon';
 
-const ContactItem = ({contact}: {contact: Contact}): JSX.Element => {
+import Avatar from '../Avatar/Avatar';
+import Indicator, {IndicatorState} from '../Indicator/Indicator';
+import Icon from '../Icon/Icon';
+
+import {
+    IncomingPeerRequest,
+    OutgoingPeerRequest,
+    IncomingPeerRequestState,
+    OutgoingPeerRequestState
+} from '../../rtc/peer-request';
+import {OTRChannel, OTRChannelState} from '../../rtc/otr';
+
+import type {SignalizedIncomingPeerRequest} from '../../event-binding/incoming-peer-request';
+import type {SignalizedOutgoingPeerRequest} from '../../event-binding/outgoing-peer-request';
+import type {SignalizedOTRChannel} from '../../event-binding/otr-channel';
+
+const ContactItem = ({contact, connectionInfo}: {
+    contact: Omit<Contact, 'lastMessageTimestamp'>,
+    connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedOTRChannel | null
+}): JSX.Element => {
+    let avatar: Blob | string | null = contact.profile ? contact.profile.avatar : null;
+    try {
+        avatar = fingerprintIcon(contact.identity);
+    } catch (err) {
+        // The digest may be incorrect
+    }
+
+    const connectionInfoLine = useMemo(() => {
+        if (!connectionInfo) return null;
+
+        if ('request' in connectionInfo && connectionInfo.request instanceof OutgoingPeerRequest) {
+            switch (connectionInfo.state.value) {
+                case OutgoingPeerRequestState.PENDING:
+                    return ['Waiting for response...', IndicatorState.LOADING] as const;
+                case OutgoingPeerRequestState.ACCEPTED:
+                    return ['Connecting...', IndicatorState.LOADING] as const;
+                case OutgoingPeerRequestState.CONNECTED:
+                    return ['Connected', IndicatorState.SUCCESS] as const;
+                case OutgoingPeerRequestState.TIMED_OUT:
+                    return ['Timed out', IndicatorState.FAILED] as const;
+                case OutgoingPeerRequestState.REJECTED:
+                    return ['Request rejected', IndicatorState.FAILED] as const;
+                case OutgoingPeerRequestState.PEER_OFFLINE:
+                    return ['User not connected', IndicatorState.FAILED] as const;
+                case OutgoingPeerRequestState.CANCELLED:
+                    return ['Request cancelled', IndicatorState.FAILED] as const;
+                case OutgoingPeerRequestState.CONNECTION_ERROR:
+                    return ['An error occurred', IndicatorState.FAILED] as const;
+                default:
+                    throw new Error('Unreachable');
+            }
+        }
+
+        if ('request' in connectionInfo && connectionInfo.request instanceof IncomingPeerRequest) {
+            switch (connectionInfo.state.value) {
+                case IncomingPeerRequestState.PENDING:
+                    return ['Wants to chat', IndicatorState.LOADING] as const;
+                case IncomingPeerRequestState.ACCEPTED:
+                    return ['Connecting...', IndicatorState.LOADING] as const;
+                case IncomingPeerRequestState.CONNECTED:
+                    return ['Connected', IndicatorState.SUCCESS] as const;
+                case IncomingPeerRequestState.REJECTED:
+                    return ['Rejected request', IndicatorState.FAILED] as const;
+                case IncomingPeerRequestState.CANCELLED:
+                    return ['cancelled their request', IndicatorState.FAILED] as const;
+                case IncomingPeerRequestState.CONNECTION_ERROR:
+                    return ['An error occurred', IndicatorState.FAILED] as const;
+                default:
+                    throw new Error('Unreachable');
+            }
+        }
+
+        if ('channel' in connectionInfo && connectionInfo.channel instanceof OTRChannel) {
+            switch (connectionInfo.state.value) {
+                case OTRChannelState.CONNECTING:
+                    return ['Connecting...', IndicatorState.LOADING] as const;
+                case OTRChannelState.AUTHENTICATING:
+                    return ['Authenticating...', IndicatorState.LOADING] as const;
+                case OTRChannelState.CONNECTED:
+                    return ['Connected', IndicatorState.SUCCESS] as const;
+                case OTRChannelState.DISCONNECTED:
+                    return ['Reconnecting...', IndicatorState.LOADING] as const;
+                case OTRChannelState.CLOSED:
+                    return ['Closed', IndicatorState.FAILED] as const;
+                default:
+                    throw new Error('Unreachable');
+            }
+        }
+
+        throw new Error('Unreachable');
+    }, [connectionInfo, connectionInfo?.state.value]);
+
+    const incomingRequest = connectionInfo &&
+        'request' in connectionInfo &&
+        (connectionInfo.request instanceof IncomingPeerRequest) ?
+        connectionInfo.request :
+        undefined;
+
+    const outgoingRequest = connectionInfo &&
+        'request' in connectionInfo &&
+        (connectionInfo.request instanceof OutgoingPeerRequest) ?
+        connectionInfo.request :
+        undefined;
+
+    const channel = connectionInfo &&
+        'channel' in connectionInfo &&
+        (connectionInfo.channel instanceof OTRChannel) ?
+        connectionInfo.channel :
+        undefined;
+
+    const [acceptRequest, rejectRequest] = useMemo(() => {
+        return [
+            (): void => incomingRequest?.accept(),
+            (): void => incomingRequest?.reject()
+        ] as const;
+    }, [incomingRequest]);
+    const cancelRequest = useMemo(() => () => outgoingRequest?.cancel(), [outgoingRequest]);
+    const closeChannel = useMemo(() => () => channel?.close(), [channel]);
+
+    const includeIncomingRequestButtons = incomingRequest &&
+        connectionInfo?.state.value === IncomingPeerRequestState.PENDING;
+    const includeOutgoingRequestButtons = outgoingRequest &&
+        connectionInfo?.state.value === OutgoingPeerRequestState.PENDING;
+    const includeChannelButtons = channel &&
+        connectionInfo?.state.value !== OTRChannelState.CLOSED;
+
     return (
         <div className={style.contact}>
-            <div className={style.contactName}>{contact.profile?.handle ?? 'Unknown user'}</div>
-        </div>
-    );
-};
-
-const IncomingContactRequest = ({request, state}: {
-    request: IncomingPeerRequest,
-    state: IncomingPeerRequestState
-}): JSX.Element => {
-    const buttons = state === IncomingPeerRequestState.PENDING ? <>
-        <button onClick={(): unknown => request.accept()}>Accept</button>
-        <button onClick={(): unknown => request.reject()}>Reject</button>
-    </> :
-        null;
-
-    return (
-        <div className={style.IncomingContactRequest}>
-            Incoming contact request from {request.peerIdentity}
-            <br />
-            State {state}
-            <br />
-            {buttons}
+            <div className={style.avatar}><Avatar data={avatar} size={64} /></div>
+            <div className={style.contactDetails}>
+                <div className={style.contactName}>{contact.profile?.handle ?? contact.identity}</div>
+                {connectionInfoLine ?
+                    <div className={style.contactIncomingOutgoing}>
+                        <div className={style.indicatorPadding}>
+                            <Indicator size={20} state={connectionInfoLine[1]} />
+                        </div>
+                        <span>{connectionInfoLine[0]}</span>
+                    </div> :
+                    null}
+            </div>
+            {includeIncomingRequestButtons || includeOutgoingRequestButtons || includeChannelButtons ?
+                <div className={style.contactButtons}>
+                    {includeIncomingRequestButtons ?
+                        <>
+                            <Icon type="check" onClick={acceptRequest} color="green" title="Accept" />
+                            <Icon type="x" onClick={rejectRequest} color="red" title="Reject" />
+                        </> :
+                        null}
+                    {includeOutgoingRequestButtons ?
+                        <Icon type="cancel" onClick={cancelRequest} title="Cancel" /> :
+                        null}
+                    {includeChannelButtons ?
+                        <Icon type="x" onClick={closeChannel} title="Close connection" /> :
+                        null}
+                </div> :
+                null}
         </div>
     );
 };
 
 const ContactsList = (): JSX.Element => {
-    const {contacts, incomingRequests} = useAppState();
-    const keyFactory = useKey();
+    const {contacts, incomingRequests, outgoingRequests, openChannels} = useAppState();
 
-    const sortedContacts = useComputed(
-        () => contacts.value.slice(0).sort((a, b) => a.lastMessageTimestamp - b.lastMessageTimestamp)
-    ).value;
+    type ContactListing = {
+        contact: Contact,
+        connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedOTRChannel | null
+    };
 
-    const incomingRequestsOrdered = useComputed(() => {
-        const requests = [];
-        for (const requestKey in incomingRequests.value) {
-            if (!Object.prototype.hasOwnProperty.call(incomingRequests.value, requestKey)) continue;
-            const {request, state} = incomingRequests.value[requestKey]!;
-            requests.push({request, state: state.value, key: requestKey});
+    const sortedContacts: ContactListing[] = useComputed(() => {
+        const contactsArr = [];
+        for (const contact of Object.values(contacts.value)) {
+            const {identity} = contact;
+            let connectionInfo = null;
+            if (Object.prototype.hasOwnProperty.call(incomingRequests.value, identity)) {
+                connectionInfo = incomingRequests.value[identity];
+            } else if (Object.prototype.hasOwnProperty.call(outgoingRequests.value, identity)) {
+                connectionInfo = outgoingRequests.value[identity];
+            } else if (Object.prototype.hasOwnProperty.call(openChannels.value, identity)) {
+                connectionInfo = openChannels.value[identity];
+            }
+            contactsArr.push({contact, connectionInfo});
         }
-        requests.sort((a, b) => a.key > b.key ? 1 : a.key === b.key ? 0 : -1);
+        contactsArr.sort((a, b) => a.contact.lastMessageTimestamp - b.contact.lastMessageTimestamp);
+        return contactsArr;
+    }).value;
+
+    const otherIncomingRequests = useComputed(() => {
+        const requests = [];
+        for (const identity in incomingRequests.value) {
+            if (!Object.prototype.hasOwnProperty.call(incomingRequests.value, identity)) continue;
+            // Ignore incoming requests already placed into contacts
+            if (Object.prototype.hasOwnProperty.call(contacts.value, identity)) continue;
+            const request = incomingRequests.value[identity];
+            requests.push(request);
+        }
+        requests.sort((a, b) => a.request.receivedTimestamp - b.request.receivedTimestamp);
+        return requests;
+    }).value;
+
+    const otherOutgoingRequests = useComputed(() => {
+        const requests = [];
+        for (const identity in outgoingRequests.value) {
+            if (!Object.prototype.hasOwnProperty.call(outgoingRequests.value, identity)) continue;
+            // Ignore incoming requests already placed into contacts
+            if (Object.prototype.hasOwnProperty.call(contacts.value, identity)) continue;
+            const request = outgoingRequests.value[identity];
+            requests.push(request);
+        }
+        requests.sort((a, b) => a.request.createdTimestamp - b.request.createdTimestamp);
+        return requests;
+    }).value;
+
+
+    const otherOpenChannels = useComputed(() => {
+        const requests = [];
+        for (const identity in openChannels.value) {
+            if (!Object.prototype.hasOwnProperty.call(openChannels.value, identity)) continue;
+            // Ignore incoming requests already placed into contacts
+            if (Object.prototype.hasOwnProperty.call(contacts.value, identity)) continue;
+            const request = openChannels.value[identity];
+            requests.push(request);
+        }
+        requests.sort((a, b) => a.channel.createdTimestamp - b.channel.createdTimestamp);
         return requests;
     }).value;
 
     return (
         <div className={style.contactsList}>
-            {sortedContacts.map(contact => (
-                <ContactItem contact={contact} key={keyFactory(contact)} />
+            {otherIncomingRequests.map(request => (
+                <ContactItem
+                    contact={{identity: request.request.peerIdentity, profile: null}}
+                    connectionInfo={request}
+                    key={request.request.peerIdentity}
+                />
             ))}
-            {incomingRequestsOrdered.map(({request, state, key}) => (
-                <IncomingContactRequest request={request} state={state} key={key} />
+            {otherOutgoingRequests.map(request => (
+                <ContactItem
+                    contact={{identity: request.request.peerIdentity, profile: null}}
+                    connectionInfo={request}
+                    key={request.request.peerIdentity}
+                />
+            ))}
+            {otherOpenChannels.map(channel => (
+                <ContactItem
+                    contact={{identity: channel.channel.peerIdentity, profile: null}}
+                    connectionInfo={channel}
+                    key={channel.channel.peerIdentity}
+                />
+            ))}
+            {sortedContacts.map(contact => (
+                <ContactItem
+                    contact={contact.contact}
+                    connectionInfo={contact.connectionInfo}
+                    key={contact.contact.identity}
+                />
             ))}
         </div>
     );

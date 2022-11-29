@@ -10,6 +10,7 @@ import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
 
 import createProfileAction from '../../actions/create-profile';
+import createPeerRequestAction from '../../actions/create-peer-request';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
@@ -17,8 +18,9 @@ import {OutgoingPeerRequest} from '../../rtc/peer-request';
 import {OTRChannelState} from '../../rtc/otr';
 
 const App = (): JSX.Element => {
-    const {profile, savedProfile, profileState, gatewayConnection} = useAppState();
+    const {profile, savedProfile, profileState} = useAppState();
     const createProfile = useAction(createProfileAction);
+    const createPeerRequest = useAction(createPeerRequestAction);
 
     const prompt = useComputed(() => {
         if (profileState.value === ProfileState.NONEXISTENT) {
@@ -34,18 +36,9 @@ const App = (): JSX.Element => {
 
     const [peerIdentityString, setPeerIdentityString] = useState('');
 
-    const gateway = gatewayConnection.value?.connection;
     const connect = (): void => {
-        if (!gateway) return;
-        const connection = gateway.makePeerRequest(peerIdentityString);
-        console.log(connection);
-        connection.addEventListener('connect', event => {
-            const {channel} = event;
-            void channel.sendMessage(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0xaa]).buffer).catch(console.error);
-        }, {once: true});
+        createPeerRequest(peerIdentityString);
     };
-
-    console.log(profile.value?.identity.toBase64());
 
     const peerPrompt = useMemo(() => (
         <div>
@@ -65,48 +58,6 @@ const App = (): JSX.Element => {
             <ContactsList />
         </div>
     );
-
-    /* An identity already exists. Please enter the decryption password: */
-
-/*
-    const [myUsername, setMyUsername] = useState('me');
-    const [yourUsername, setYourUsername] = useState('you');
-
-    const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
-
-    useEffect(() => {
-        void ConnectionManager.create(CONNECTION_SERVER).then(cm => setConnectionManager(cm));
-    }, []);
-
-    const myUsernameInput = useMemo(() => <div>
-        <label>My username</label>
-        <input type="text" value={myUsername} onInput={(event): void => {
-            setMyUsername((event.target as HTMLInputElement).value);
-        }} />
-    </div>, [myUsername, setMyUsername]);
-
-    const yourUsernameInput = useMemo(() => <div>
-        <label>Your username</label>
-        <input type="text" value={yourUsername} onInput={(event): void => {
-            setYourUsername((event.target as HTMLInputElement).value);
-        }} />
-    </div>, [yourUsername, setYourUsername]);
-
-    const connect = useMemo(() => (
-        () => {
-            console.log(connectionManager);
-            if (!connectionManager) return;
-            console.log(connectionManager.createConnection({username: myUsername}, {username: yourUsername}));
-        }
-    ), [myUsername, yourUsername, connectionManager]);
-
-    return (
-        <div>
-            {myUsernameInput}
-            {yourUsernameInput}
-            <button onClick={connect} disabled={connectionManager === null}>Connect</button>
-        </div>
-    );*/
 };
 
 export default App;

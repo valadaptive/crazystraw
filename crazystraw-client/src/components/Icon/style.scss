@@ -1,0 +1,77 @@
+@use '../../colors.scss' as col;
+
+.icon {
+    width: 24px;
+    height: 24px;
+    background-color: col.$icon-detail;
+    display: inline-block;
+}
+
+@mixin button-color($hover, $active, $disabled) {
+    &:hover {
+        background-color: $hover;
+    }
+
+    &:active {
+        background-color: $active;
+    }
+
+    &.disabled {
+        background-color: $disabled;
+    }
+}
+
+.button {
+    cursor: pointer;
+    background-color: col.$interactive-normal;
+
+    @include button-color(col.$interactive-hover, col.$interactive-active, col.$interactive-muted);
+
+    &.disabled {
+        cursor: not-allowed;
+    }
+}
+
+.green {
+    background-color: col.$green;
+
+    &.button {
+        @include button-color(col.$green-hover, col.$green-active, col.$green-muted);
+    }
+}
+
+.yellow {
+    background-color: col.$yellow;
+
+    &.button {
+        @include button-color(col.$yellow-hover, col.$yellow-active, col.$yellow-muted);
+    }
+}
+
+.red {
+    background-color: col.$red;
+
+    &.button {
+        @include button-color(col.$red-hover, col.$red-active, col.$red-muted);
+    }
+}
+
+.connection {
+    mask-image: url('../../assets/icons/connection.svg');
+}
+
+.chat-bubble {
+    mask-image: url('../../assets/icons/chat-bubble.svg');
+}
+
+.cancel {
+    mask-image: url('../../assets/icons/cancel.svg');
+}
+
+.x {
+    mask-image: url('../../assets/icons/x.svg');
+}
+
+.check {
+    mask-image: url('../../assets/icons/check.svg');
+}

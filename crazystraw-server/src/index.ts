@@ -115,7 +115,6 @@ class Gateway {
                 }
             });
             console.log('Connection!');
-            //console.log(ws);
         });
     }
 
@@ -228,7 +227,6 @@ class Gateway {
                     }
                     return;
                 } catch (err) {
-                    console.error(err);
                     ws.socket.close(GatewayCloseCode.INVALID_FORMAT, 'Invalid signature format');
                 }
                 this.waitingChallenges.delete(ws);

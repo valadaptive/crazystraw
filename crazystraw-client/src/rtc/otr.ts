@@ -74,7 +74,8 @@ const enum MessageType {
     DH_KEY,
     REVEAL_SIGNATURE,
     SIGNATURE,
-    DATA
+    DATA,
+    CLOSE
 }
 
 const schemas = {
@@ -135,7 +136,7 @@ class OTRChannelStateChangeEvent extends TypedEvent<'statechange'> {
 
 class OTRChannelMessageEvent extends TypedEvent<'message'> {
     public data: ArrayBuffer;
-    oldMACKeys: ArrayBuffer[];
+    public oldMACKeys: ArrayBuffer[];
     constructor (data: ArrayBuffer, oldMACKeys: ArrayBuffer[]) {
         super('message');
         this.data = data;
@@ -236,10 +237,11 @@ OTRChannelMessageErrorEvent
     private abortController: AbortController;
 
     private myIdentity: PersonalIdentity;
-    private peerIdentity: string;
     private keyState: KeyState | null;
 
     public state: OTRChannelState;
+    public peerIdentity: string;
+    public createdTimestamp: number;
     public closeReason: Error | null;
 
     constructor (
@@ -261,6 +263,7 @@ OTRChannelMessageErrorEvent
         this.keyState = null;
 
         this.state = OTRChannelState.CONNECTING;
+        this.createdTimestamp = Date.now();
         this.closeReason = null;
 
         void this.connect(initiating);
@@ -272,6 +275,16 @@ OTRChannelMessageErrorEvent
     }
 
     public close (error?: Error): void {
+        if (this.state === OTRChannelState.CLOSED) return;
+        try {
+            this.rtcChannel.send(new Uint8Array([MessageType.CLOSE]).buffer);
+        } catch (err) {
+            // Swallow errors
+        }
+        this.closeChannels(error);
+    }
+
+    private closeChannels (error?: Error): void {
         this.abortController.abort();
         if (error) this.closeReason = error;
         this.setState(OTRChannelState.CLOSED);
@@ -316,6 +329,9 @@ OTRChannelMessageErrorEvent
                     } catch (err) {
                         this.dispatchEvent(new OTRChannelMessageErrorEvent(err));
                     }
+                }
+                if (dv.getUint8(0) === MessageType.CLOSE) {
+                    this.closeChannels();
                 }
             }, {signal: this.abortController.signal});
         } catch (err) {

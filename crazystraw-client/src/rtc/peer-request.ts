@@ -65,12 +65,14 @@ OutgoingPeerRequestConnectEvent |
 OutgoingPeerRequestStateChangeEvent
 > {
     public state: OutgoingPeerRequestState;
+    public peerIdentity: string;
+    public createdTimestamp: number;
 
     private myIdentity: PersonalIdentity;
-    private peerIdentity: string;
     private gateway: GatewayConnection;
     private connectionID: string;
     private abortController: AbortController;
+
 
     private setState (newState: OutgoingPeerRequestState): void {
         this.state = newState;
@@ -81,6 +83,7 @@ OutgoingPeerRequestStateChangeEvent
         super();
 
         this.state = OutgoingPeerRequestState.PENDING;
+        this.createdTimestamp = Date.now();
 
         this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
@@ -148,8 +151,8 @@ export const enum IncomingPeerRequestState {
     REJECTED,
     /** The peer cancelled the request. */
     CANCELLED,
-    /** WebRTC could not connect. TODO: rename because this fires on OTR auth failures too */
-    WEBRTC_FAILED
+    /** WebRTC, signalling, or auth failure */
+    CONNECTION_ERROR
 }
 
 class IncomingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
@@ -172,6 +175,7 @@ IncomingPeerRequestConnectEvent
 > {
     public state: IncomingPeerRequestState;
     public peerIdentity: string;
+    public receivedTimestamp: number;
 
     private gateway: GatewayConnection;
     private myIdentity: PersonalIdentity;
@@ -188,6 +192,7 @@ IncomingPeerRequestConnectEvent
         this.gateway = gateway;
         this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
+        this.receivedTimestamp = Date.now();
         this.state = IncomingPeerRequestState.PENDING;
         this.connectionID = connectionID;
         this.abortController = new AbortController();
@@ -234,7 +239,7 @@ IncomingPeerRequestConnectEvent
                         break;
                     }
                     case OTRChannelState.CLOSED: {
-                        this.setState(IncomingPeerRequestState.WEBRTC_FAILED);
+                        this.setState(IncomingPeerRequestState.CONNECTION_ERROR);
                         this.abortController.abort();
                         break;
                     }
@@ -243,7 +248,7 @@ IncomingPeerRequestConnectEvent
 
             channel.addEventListener('statechange', onChannelStateChange, {signal});
         } catch (err) {
-            this.setState(IncomingPeerRequestState.WEBRTC_FAILED);
+            this.setState(IncomingPeerRequestState.CONNECTION_ERROR);
         }
     }
 

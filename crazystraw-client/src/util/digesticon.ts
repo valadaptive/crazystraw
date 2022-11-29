@@ -1,3 +1,5 @@
+import {toByteArray} from 'base64-js';
+
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 const shapes: readonly ((color: string, transform: string) => string)[] = [
     /*(color: string, transform: string) => `<polygon points="0,0 16,0 0,8" fill="${color}" transform="${transform}"/>`,
@@ -111,7 +113,10 @@ const coordLookup = [
 
 /* eslint-enable @typescript-eslint/explicit-function-return-type */
 
-const createDigestIcon = (digest: Uint8Array): string => {
+const svgToURI = (svg: string): string => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+const createDigestIcon = (digest: Uint8Array | string): string => {
+    if (typeof digest === 'string') digest = toByteArray(digest);
     if (digest.length !== 16) throw new Error('Digest must be 128 bits');
     const colorIndex = digest[0] & 7;
     const shapesInSvg = [];
@@ -149,7 +154,7 @@ const createDigestIcon = (digest: Uint8Array): string => {
     }
 
     const result = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" fill="#f5f5f4" />${shapesInSvg.join('')}</svg>`;
-    return result;
+    return svgToURI(result);
 };
 
 export default createDigestIcon;

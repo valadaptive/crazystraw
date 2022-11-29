@@ -6,7 +6,10 @@ import setupEventLogic from './event-logic';
 
 import {Profile, PersonalProfile} from '../rtc/profile';
 import {GatewayConnection, GatewayConnectionState} from '../rtc/gateway';
-import {IncomingPeerRequest, IncomingPeerRequestState} from '../rtc/peer-request';
+
+import {SignalizedIncomingPeerRequest} from '../event-binding/incoming-peer-request';
+import {SignalizedOutgoingPeerRequest} from '../event-binding/outgoing-peer-request';
+import {SignalizedOTRChannel} from '../event-binding/otr-channel';
 
 export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
@@ -21,6 +24,10 @@ export type Contact = {
     lastMessageTimestamp: number
 };
 
+// This is unsafe unless noUncheckedIndexedAccess is enabled, but that would forbid array indexing too.
+// Thanks TypeScript!
+type Dictionary<T> = {[x: string]: T};
+
 /**
  * Global application state
  */
@@ -33,11 +40,10 @@ export type AppState = {
         state: Signal<GatewayConnectionState>,
         cleanup: () => void
     } | null>,
-    incomingRequests: Signal<Partial<Record<string, {
-        request: IncomingPeerRequest,
-        state: Signal<IncomingPeerRequestState>
-    }>>>,
-    contacts: Signal<Contact[]>
+    incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
+    outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
+    openChannels: Signal<Dictionary<SignalizedOTRChannel>>,
+    contacts: Signal<Dictionary<Contact>>
 };
 
 export const createStore = (): AppState => {
@@ -47,7 +53,9 @@ export const createStore = (): AppState => {
         profileState: signal(ProfileState.NONEXISTENT),
         gatewayConnection: signal(null),
         incomingRequests: signal({}),
-        contacts: signal([])
+        outgoingRequests: signal({}),
+        openChannels: signal({}),
+        contacts: signal({})
     };
 
     const savedProfile = localStorage.getItem('profile');
