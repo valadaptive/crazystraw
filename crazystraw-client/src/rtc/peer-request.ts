@@ -1,6 +1,13 @@
 import {GatewayMessageType} from 'crazystraw-common/ws-types';
 
-import {GatewayConnection, GatewayConnectionMessageEvent} from './gateway';
+import {
+    GatewayConnection,
+    GatewayConnectionMessageEvent,
+    SOCKET_CLOSED,
+    TIMED_OUT,
+    PEER_REQUEST_REJECTED,
+    PEER_OFFLINE
+} from './gateway';
 import {PersonalIdentity} from './identity';
 import {OTRChannel, OTRChannelState} from './otr';
 
@@ -13,14 +20,16 @@ export const enum OutgoingPeerRequestState {
     ACCEPTED,
     /** We have connected with this peer over WebRTC. */
     CONNECTED,
+    /** The gateway timed out. */
+    TIMED_OUT,
     /** The peer has rejected the peer request. */
     REJECTED,
     /** The peer is offline right now. */
     PEER_OFFLINE,
     /** We cancelled the request. */
     CANCELLED,
-    /** WebRTC could not connect. */
-    WEBRTC_FAILED
+    /** There was some error in the connection. */
+    CONNECTION_ERROR
 }
 
 class OutgoingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
@@ -57,6 +66,7 @@ OutgoingPeerRequestStateChangeEvent
 > {
     public state: OutgoingPeerRequestState;
 
+    private myIdentity: PersonalIdentity;
     private peerIdentity: string;
     private gateway: GatewayConnection;
     private connectionID: string;
@@ -71,67 +81,52 @@ OutgoingPeerRequestStateChangeEvent
         super();
 
         this.state = OutgoingPeerRequestState.PENDING;
+
+        this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
         this.gateway = gateway;
         this.connectionID = crypto.randomUUID();
         this.abortController = new AbortController();
-        const {signal} = this.abortController;
 
-        const onMessage = (event: GatewayConnectionMessageEvent): void => {
-            const {message} = event;
+        void this.send();
+    }
 
-            if ('connectionID' in message && message.connectionID !== this.connectionID) return;
+    private async send (): Promise<void> {
+        try {
+            await this.gateway.sendPeerRequest(this.peerIdentity, this.connectionID, this.abortController.signal);
 
-            if (message.type === GatewayMessageType.PEER_OFFLINE) {
-                this.setState(OutgoingPeerRequestState.PEER_OFFLINE);
-                this.abortController.abort();
-                return;
-            }
+            this.setState(OutgoingPeerRequestState.ACCEPTED);
+            // peer request accepted-- set up RTC channel
+            const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, true);
 
-            if (message.type === GatewayMessageType.PEER_REQUEST_REJECTED) {
-                this.setState(OutgoingPeerRequestState.REJECTED);
-                this.abortController.abort();
-                return;
-            }
-
-
-            if (message.type === GatewayMessageType.PEER_REQUEST_ACCEPTED) {
-                this.setState(OutgoingPeerRequestState.ACCEPTED);
-                this.gateway.removeEventListener('message', onMessage);
-                // peer request accepted-- set up RTC channel
-                const channel = new OTRChannel(this.gateway, myIdentity, this.peerIdentity, this.connectionID, true);
-
-                const onChannelStateChange = (): void => {
-                    switch (channel.state) {
-                        case OTRChannelState.CONNECTED: {
-                            this.setState(OutgoingPeerRequestState.CONNECTED);
-                            this.dispatchEvent(new OutgoingPeerRequestConnectEvent(channel));
-                            this.abortController.abort();
-                            break;
-                        }
-                        case OTRChannelState.CLOSED: {
-                            this.setState(OutgoingPeerRequestState.WEBRTC_FAILED);
-                            this.abortController.abort();
-                            break;
-                        }
+            const onChannelStateChange = (): void => {
+                switch (channel.state) {
+                    case OTRChannelState.CONNECTED: {
+                        this.setState(OutgoingPeerRequestState.CONNECTED);
+                        this.dispatchEvent(new OutgoingPeerRequestConnectEvent(channel));
+                        this.abortController.abort();
+                        break;
                     }
-                };
-                channel.addEventListener('statechange', onChannelStateChange, {signal});
-                return;
-            }
-        };
-
-        this.gateway.addEventListener('message', onMessage, {signal});
-
-        this.gateway.send({
-            type: GatewayMessageType.PEER_REQUEST,
-            peerIdentity: this.peerIdentity,
-            connectionID: this.connectionID
-        });
+                    case OTRChannelState.CLOSED: {
+                        this.setState(OutgoingPeerRequestState.CONNECTION_ERROR);
+                        this.abortController.abort();
+                        break;
+                    }
+                }
+            };
+            channel.addEventListener('statechange', onChannelStateChange, {signal: this.abortController.signal});
+        } catch (err) {
+            if (err === TIMED_OUT) this.setState(OutgoingPeerRequestState.TIMED_OUT);
+            if (err === SOCKET_CLOSED) this.setState(OutgoingPeerRequestState.CONNECTION_ERROR);
+            if (err === PEER_REQUEST_REJECTED) this.setState(OutgoingPeerRequestState.REJECTED);
+            if (err === PEER_OFFLINE) this.setState(OutgoingPeerRequestState.PEER_OFFLINE);
+            this.abortController.abort();
+        }
     }
 
     cancel (): void {
-        this.gateway.send({
+        // This message isn't that important--it just tells the peer that we cancelled the request
+        this.gateway.sendAndForget({
             type: GatewayMessageType.PEER_REQUEST_CANCEL,
             peerIdentity: this.peerIdentity,
             connectionID: this.connectionID

@@ -248,6 +248,7 @@ class Gateway {
                 if (!peerConnection) {
                     await ws.send({
                         type: GatewayMessageType.PEER_OFFLINE,
+                        for: message.seq,
                         connectionID: message.connectionID
                     });
                     return;
@@ -294,6 +295,7 @@ class Gateway {
                 if (!peerConnection) {
                     await ws.send({
                         type: GatewayMessageType.PEER_OFFLINE,
+                        for: message.seq,
                         connectionID: message.connectionID
                     });
                     return;
@@ -320,6 +322,7 @@ class Gateway {
                 if (!peerConnection) {
                     await ws.send({
                         type: GatewayMessageType.PEER_OFFLINE,
+                        for: message.seq,
                         connectionID: message.connectionID
                     });
                     return;
@@ -348,6 +351,7 @@ class Gateway {
 
                 await connection.send({
                     type: GatewayMessageType.PEER_REQUEST_ACCEPTED,
+                    for: message.seq,
                     connectionID: message.connectionID
                 });
 
@@ -368,6 +372,7 @@ class Gateway {
 
                 await connection.send({
                     type: GatewayMessageType.PEER_REQUEST_REJECTED,
+                    for: message.seq,
                     connectionID: message.connectionID
                 });
 

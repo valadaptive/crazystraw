@@ -17,10 +17,10 @@ export const enum GatewayMessageType {
     PEER_REQUEST_ACCEPTED,
     /** Sent from the server to tell the client that a peer request was rejected by the peer. */
     PEER_REQUEST_REJECTED,
-    /** Sent from the client to tell the server that a stored peer request was cancelled by the client. */
-    PEER_REQUEST_CANCEL,
     /** Sent from the server in response to a REQUEST_PEER message when the peer is offline. */
     PEER_OFFLINE,
+    /** Sent from the client to tell the server that a stored peer request was cancelled by the client. */
+    PEER_REQUEST_CANCEL,
 
     /** Forward a WebRTC offer or answer between clients. */
     PEER_MESSAGE_DESCRIPTION,
@@ -64,15 +64,23 @@ export const enum GatewayCloseCode {
     RESOURCE_EXCEEDED
 }
 
-/** Connection ID; used to disambiguate between different connections being established. */
-
-export type GatewayMessageBase = {
+type GatewayMessageBase = {
     /**
      * Sequence number; used to refer back to previous messages.
      * Generated monotonically; increments by 2. Clients use even numbers, servers use odd numbers.
      * This ensures there can be no accidental sequence number collisions.
      */
     seq: number
+};
+
+/** Peer negotiation message response */
+type PeerMessageBase = GatewayMessageBase & {
+    /**
+     * Sequence number of the sent message.
+     * Peer request messages will always be replied to by the gateway. Including this allows the client to send a peer
+     * message then wait for a message whose "for" field is that message's sequence number.
+     */
+    for: number
 };
 
 export type IdentifyMessage = GatewayMessageBase & {
@@ -113,14 +121,20 @@ export type PeerRequestMessage = GatewayMessageBase & {
     connectionID: string
 };
 
-export type PeerRequestAcceptedMessage = GatewayMessageBase & {
+export type PeerRequestAcceptedMessage = PeerMessageBase & {
     type: GatewayMessageType.PEER_REQUEST_ACCEPTED,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
 };
 
-export type PeerRequestRejectedMessage = GatewayMessageBase & {
+export type PeerRequestRejectedMessage = PeerMessageBase & {
     type: GatewayMessageType.PEER_REQUEST_REJECTED,
+    /** Unique ID for this WebRTC connection. */
+    connectionID: string
+};
+
+export type PeerOfflineMessage = PeerMessageBase & {
+    type: GatewayMessageType.PEER_OFFLINE,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
 };
@@ -129,12 +143,6 @@ export type PeerRequestCancelMessage = GatewayMessageBase & {
     type: GatewayMessageType.PEER_REQUEST_CANCEL,
     /** Peer's unique identity string, currently its public key fingerprint. */
     peerIdentity: string,
-    /** Unique ID for this WebRTC connection. */
-    connectionID: string
-};
-
-export type PeerOfflineMessage = GatewayMessageBase & {
-    type: GatewayMessageType.PEER_OFFLINE,
     /** Unique ID for this WebRTC connection. */
     connectionID: string
 };
@@ -217,7 +225,7 @@ export type ServerMessage =
     GotPeerRequestCancelledMessage;
 
 export type ClientMessage =
-    IdentifyMessage|
+    IdentifyMessage |
     ChallengeResponseMessage |
     PeerRequestMessage |
     PeerRequestCancelMessage |
