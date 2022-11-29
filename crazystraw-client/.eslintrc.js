@@ -1,3 +1,10 @@
+const tsRules = {
+    '@typescript-eslint/no-var-requires': 'error',
+    '@typescript-eslint/ban-types': 'off',
+    '@typescript-eslint/unbound-method': 'off',
+    '@typescript-eslint/no-unnecessary-condition': 'error'
+};
+
 module.exports = {
     plugins: [
         '@typescript-eslint',
@@ -9,8 +16,7 @@ module.exports = {
         'plugin:@typescript-eslint/recommended'
     ],
     env: {
-        es6: true,
-        node: true
+        es6: true
     },
     globals: {
 
@@ -29,12 +35,7 @@ module.exports = {
                 commonjs: true,
                 node: false
             },
-            rules: {
-                '@typescript-eslint/no-var-requires': 'error',
-                '@typescript-eslint/ban-types': 'off',
-                '@typescript-eslint/unbound-method': 'off',
-                '@typescript-eslint/no-unnecessary-condition': 'error'
-            }
+            rules: tsRules
         },
         {
             files: ['*.ts', '*.tsx'],
@@ -42,6 +43,19 @@ module.exports = {
                 '@typescript-eslint/explicit-function-return-type': ['error'],
                 '@typescript-eslint/no-non-null-assertion': 'off'
             }
+        },
+        {
+            files: ['build-scripts/**/*'],
+            parserOptions: {
+                project: './build-scripts/tsconfig.json'
+            },
+            extends: [
+                'plugin:@typescript-eslint/recommended-requiring-type-checking'
+            ],
+            env: {
+                node: true
+            },
+            rules: tsRules
         }
     ],
     rules: {

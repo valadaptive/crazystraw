@@ -1,0 +1,11 @@
+{
+    "name": "Attachment",
+    "type": "record",
+    "fields": [
+        {"name": "id", "type": "uuid"},
+        {"name": "name", "type": "string"},
+        {"name": "width", "type": ["null", "int"]},
+        {"name": "height", "type": ["null", "int"]},
+        {"name": "data", "type": "bytes"}
+    ]
+}

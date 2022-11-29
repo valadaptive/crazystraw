@@ -1,0 +1,24 @@
+{
+    "name": "ChatData",
+    "type": "record",
+    "fields": [
+        {"name": "id", "type": "uuid"},
+        {"name": "type", "type": {
+            "name": "ChatDataType",
+            "type": "enum",
+            "symbols": [
+                "MESSAGE",
+                "EDIT_MESSAGE",
+                "ACK",
+                "REQUEST_PROFILE",
+                "PROFILE"
+            ]
+        }},
+        {"name": "data", "type": [
+            "Message",
+            "EditMessage",
+            "RequestProfile",
+            "Profile"
+        ]}
+    ]
+}

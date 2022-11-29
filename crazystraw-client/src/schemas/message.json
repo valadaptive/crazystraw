@@ -1,0 +1,9 @@
+{
+    "name": "Message",
+    "type": "record",
+    "fields": [
+        {"name": "timestamp", "type": "long"},
+        {"name": "contents", "type": "string"},
+        {"name": "attachments", "type": {"type": "array", "items": "Attachment"}}
+    ]
+}

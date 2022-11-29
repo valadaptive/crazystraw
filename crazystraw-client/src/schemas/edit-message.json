@@ -1,0 +1,9 @@
+{
+    "name": "EditMessage",
+    "type": "record",
+    "fields": [
+        {"name": "messageID", "type": "uuid"},
+        {"name": "newContents", "type": "string"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}
