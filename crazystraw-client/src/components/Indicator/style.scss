@@ -1,0 +1,36 @@
+.indicator {
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: middle;
+    box-sizing: border-box;
+
+    &.disabled {
+        border-color: rgb(113, 107, 130);
+        border-style: solid;
+    }
+
+    &.failed {
+        background-color: rgb(206, 40, 53);
+    }
+
+    &.loading {
+        border-color: rgb(238, 179, 49);
+        border-style: solid;
+        animation: 1s linear infinite spin;
+        border-bottom-color: transparent;
+    }
+
+    &.success {
+        background-color: rgb(16, 174, 106);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}

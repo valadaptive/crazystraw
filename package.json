@@ -4,5 +4,8 @@
     "crazystraw-client",
     "crazystraw-server",
     "crazystraw-common"
-  ]
+  ],
+  "dependencies": {
+    "classnames": "^2.3.2"
+  }
 }
