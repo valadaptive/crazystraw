@@ -217,7 +217,7 @@ IncomingPeerRequestConnectEvent
         }
         try {
             const {signal} = this.abortController;
-            this.gateway.send({
+            this.gateway.sendAndForget({
                 type: GatewayMessageType.PEER_ACCEPT,
                 peerIdentity: this.peerIdentity,
                 connectionID: this.connectionID
@@ -252,7 +252,7 @@ IncomingPeerRequestConnectEvent
             throw new Error('Cannot call reject() right now');
         }
 
-        this.gateway.send({
+        this.gateway.sendAndForget({
             type: GatewayMessageType.PEER_REJECT,
             peerIdentity: this.peerIdentity,
             connectionID: this.connectionID

@@ -98,7 +98,8 @@ RTCChannelMessageEvent
             'icecandidate',
             (event: RTCPeerConnectionIceEvent): void => {
                 if (!event.candidate) return;
-                this.gateway.send({
+                // TODO: make sure this is robust when reconnecting to gateway
+                this.gateway.sendAndForget({
                     type: GatewayMessageType.PEER_ICE_CANDIDATE,
                     peerIdentity: this.peerIdentity,
                     connectionID: this.connectionID,
@@ -284,7 +285,8 @@ RTCChannelMessageEvent
     private async makeOfferOrAnswer (): Promise<void> {
         // Sets local description to either an offer or a response, depending on the remote description
         await this.connection.setLocalDescription();
-        this.gateway.send({
+        // TODO: make sure this is robust when reconnecting to gateway
+        this.gateway.sendAndForget({
             type: GatewayMessageType.PEER_MESSAGE_DESCRIPTION,
             peerIdentity: this.peerIdentity,
             connectionID: this.connectionID,

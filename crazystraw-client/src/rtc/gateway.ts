@@ -62,6 +62,7 @@ export class GatewayConnectionMessageEvent extends TypedEvent<'message'> {
 
 export const SOCKET_CLOSED = Symbol('SOCKET_CLOSED');
 export const TIMED_OUT = Symbol('TIMED_OUT');
+export const OPERATION_CANCELLED = Symbol('OPERATION_CANCELLED');
 export const PEER_REQUEST_REJECTED = Symbol('PEER_REQUEST_REJECTED');
 export const PEER_OFFLINE = Symbol('PEER_OFFLINE');
 
@@ -78,12 +79,8 @@ GatewayConnectionMessageEvent
     private seq: number;
     /** Identity used when connecting, for authentication purposes. */
     private identity: PersonalIdentity;
-    /** Messages to be sent after the websocket opens. */
-    private queuedMessages: {
-        message: Unsequenced<ClientMessage>,
-        onSend: (ws: WebSocket) => unknown,
-        onError: (reason: unknown) => unknown
-    }[];
+    /** Promises to be resolved after the socket authenticates. */
+    private onAuthenticationPromises: {resolve: (ws: WebSocket) => unknown, reject: (reason: unknown) => unknown}[];
 
     public state: GatewayConnectionState;
 
@@ -93,7 +90,7 @@ GatewayConnectionMessageEvent
         this.authenticated = false;
         this.seq = 0;
         this.identity = identity;
-        this.queuedMessages = [];
+        this.onAuthenticationPromises = [];
 
         this.state = {type: GatewayConnectionStateType.CONNECTING};
 
@@ -135,11 +132,10 @@ GatewayConnectionMessageEvent
 
             this.authenticated = true;
             // Send all enqueued messages after authenticating
-            for (const message of this.queuedMessages) {
-                this.sendTo(ws, message.message);
-                message.onSend(ws);
+            for (const promise of this.onAuthenticationPromises) {
+                promise.resolve(ws);
             }
-            this.queuedMessages.length = 0;
+            this.onAuthenticationPromises.length = 0;
         } catch (err) {
             // If we time out or there's some other error, close the socket
             // Does nothing if the error was thrown due to the socket being closed already
@@ -173,8 +169,8 @@ GatewayConnectionMessageEvent
             reason: event.reason
         });
 
-        for (const message of this.queuedMessages) {
-            message.onError(SOCKET_CLOSED);
+        for (const promise of this.onAuthenticationPromises) {
+            promise.reject(SOCKET_CLOSED);
         }
 
         // Remove all listeners for the websocket
@@ -185,6 +181,7 @@ GatewayConnectionMessageEvent
 
     private initializeSocket (serverURL: string): void {
         this.authenticated = false;
+        this.seq = 0;
         const abortController = new AbortController();
         const {signal} = abortController;
 
@@ -244,36 +241,34 @@ GatewayConnectionMessageEvent
      * @param message The message to send.
      * @returns A promise that resolves with the WebSocket that the message was (eventually) sent over.
      */
-    private async sendOrEnqueue (message: Unsequenced<ClientMessage>): Promise<WebSocket> {
+    private async sendOrEnqueue (
+        message: Unsequenced<ClientMessage>,
+        signal?: AbortSignal
+    ): Promise<{ws: WebSocket, seq: number}> {
         let {ws} = this;
-        if (!ws) {
+        if (!ws || !this.authenticated) {
             ws = await new Promise<WebSocket>((resolve, reject) => {
-                this.queuedMessages.push({
-                    message,
-                    onSend: resolve,
-                    onError: reject
-                });
+                this.onAuthenticationPromises.push({resolve, reject});
             });
         }
 
-        if (!this.authenticated) {
-            await new Promise<WebSocket>((resolve, reject) => {
-                this.queuedMessages.push({
-                    message,
-                    onSend: resolve,
-                    onError: reject
-                });
-            });
-        }
+        if (signal && signal.aborted) throw OPERATION_CANCELLED;
 
         // TODO: is there a race condition where a websocket could respond to our message while we're still awaiting
         // sendOrEnqueue?
-        this.sendTo(ws, message);
-        return ws;
+        const seq = this.sendTo(ws, message);
+        return {ws, seq};
     }
 
+    /**
+     * Send a peer request and wait for it to be accepted, rejected, or errored.
+     * @param peerIdentity The peer's identity string.
+     * @param connectionID Connection UUID.
+     * @param signal Signal which will be fired if the request is cancelled.
+     * @returns when the peer request is accepted, or errors when it is rejected.
+     */
     public async sendPeerRequest (peerIdentity: string, connectionID: string, signal: AbortSignal): Promise<void> {
-        const ws = await this.sendOrEnqueue({type: GatewayMessageType.PEER_REQUEST, peerIdentity, connectionID});
+        const {ws, seq} = await this.sendOrEnqueue({type: GatewayMessageType.PEER_REQUEST, peerIdentity, connectionID});
 
         const response = await this.waitFor(
             ws,
@@ -281,7 +276,7 @@ GatewayConnectionMessageEvent
                 message.type === GatewayMessageType.PEER_REQUEST_ACCEPTED ||
                 message.type === GatewayMessageType.PEER_REQUEST_REJECTED ||
                 message.type === GatewayMessageType.PEER_OFFLINE
-            ),
+            ) && message.for === seq,
             10000,
             signal
         );
@@ -304,7 +299,7 @@ GatewayConnectionMessageEvent
         if (this.ws) this.sendTo(this.ws, message);
     }
 
-    public sendTo (ws: WebSocket, message: Unsequenced<ClientMessage>): number {
+    private sendTo (ws: WebSocket, message: Unsequenced<ClientMessage>): number {
         const msgSeq = this.seq;
         (message as ClientMessage).seq = msgSeq;
         this.seq += 2;
