@@ -1,10 +1,10 @@
 import type {AppState} from '../util/state';
 
-import connectOTRChannel from '../event-binding/otr-channel';
+import connectChatChannel from '../event-binding/chat-channel';
 
-import {OTRChannel} from '../rtc/otr';
+import {ChatChannel} from '../rtc/chat';
 
-const createChannel = (store: AppState, channel: OTRChannel): void => {
+const createChannel = (store: AppState, channel: ChatChannel): void => {
     const oldChannels = store.openChannels.value;
 
     const prevChannel = oldChannels[channel.peerIdentity];
@@ -17,7 +17,7 @@ const createChannel = (store: AppState, channel: OTRChannel): void => {
 
     store.openChannels.value = {
         ...oldChannels,
-        [channel.peerIdentity]: connectOTRChannel(store, channel)
+        [channel.peerIdentity]: connectChatChannel(store, channel)
     };
 };
 

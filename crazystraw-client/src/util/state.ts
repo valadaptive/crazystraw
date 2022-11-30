@@ -9,7 +9,7 @@ import {GatewayConnection, GatewayConnectionState} from '../rtc/gateway';
 
 import {SignalizedIncomingPeerRequest} from '../event-binding/incoming-peer-request';
 import {SignalizedOutgoingPeerRequest} from '../event-binding/outgoing-peer-request';
-import {SignalizedOTRChannel} from '../event-binding/otr-channel';
+import {SignalizedChatChannel} from '../event-binding/chat-channel';
 
 export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
@@ -42,7 +42,7 @@ export type AppState = {
     } | null>,
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
-    openChannels: Signal<Dictionary<SignalizedOTRChannel>>,
+    openChannels: Signal<Dictionary<SignalizedChatChannel>>,
     contacts: Signal<Dictionary<Contact>>
 };
 

@@ -241,7 +241,6 @@ OTRChannelMessageErrorEvent
 
     public state: OTRChannelState;
     public peerIdentity: string;
-    public createdTimestamp: number;
     public closeReason: Error | null;
 
     constructor (
@@ -263,7 +262,6 @@ OTRChannelMessageErrorEvent
         this.keyState = null;
 
         this.state = OTRChannelState.CONNECTING;
-        this.createdTimestamp = Date.now();
         this.closeReason = null;
 
         void this.connect(initiating);

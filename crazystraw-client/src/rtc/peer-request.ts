@@ -9,7 +9,7 @@ import {
     PEER_OFFLINE
 } from './gateway';
 import {PersonalIdentity} from './identity';
-import {OTRChannel, OTRChannelState} from './otr';
+import {ChatChannel, ChatChannelState} from './chat';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
 
@@ -51,8 +51,8 @@ class OutgoingPeerRequestAbortEvent extends TypedEvent<'abort'> {
 }
 
 class OutgoingPeerRequestConnectEvent extends TypedEvent<'connect'> {
-    public channel: OTRChannel;
-    constructor (channel: OTRChannel) {
+    public channel: ChatChannel;
+    constructor (channel: ChatChannel) {
         super('connect');
         this.channel = channel;
     }
@@ -100,17 +100,17 @@ OutgoingPeerRequestStateChangeEvent
 
             this.setState(OutgoingPeerRequestState.ACCEPTED);
             // peer request accepted-- set up RTC channel
-            const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, true);
+            const channel = new ChatChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, true);
 
             const onChannelStateChange = (): void => {
                 switch (channel.state) {
-                    case OTRChannelState.CONNECTED: {
+                    case ChatChannelState.CONNECTED: {
                         this.setState(OutgoingPeerRequestState.CONNECTED);
                         this.dispatchEvent(new OutgoingPeerRequestConnectEvent(channel));
                         this.abortController.abort();
                         break;
                     }
-                    case OTRChannelState.CLOSED: {
+                    case ChatChannelState.CLOSED: {
                         this.setState(OutgoingPeerRequestState.CONNECTION_ERROR);
                         this.abortController.abort();
                         break;
@@ -162,8 +162,8 @@ class IncomingPeerRequestStateChangeEvent extends TypedEvent<'statechange'> {
 }
 
 class IncomingPeerRequestConnectEvent extends TypedEvent<'connect'> {
-    public channel: OTRChannel;
-    constructor (channel: OTRChannel) {
+    public channel: ChatChannel;
+    constructor (channel: ChatChannel) {
         super('connect');
         this.channel = channel;
     }
@@ -227,18 +227,18 @@ IncomingPeerRequestConnectEvent
                 peerIdentity: this.peerIdentity,
                 connectionID: this.connectionID
             });
-            const channel = new OTRChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, false);
+            const channel = new ChatChannel(this.gateway, this.myIdentity, this.peerIdentity, this.connectionID, false);
             this.setState(IncomingPeerRequestState.ACCEPTED);
 
             const onChannelStateChange = (): void => {
                 switch (channel.state) {
-                    case OTRChannelState.CONNECTED: {
+                    case ChatChannelState.CONNECTED: {
                         this.setState(IncomingPeerRequestState.CONNECTED);
                         this.dispatchEvent(new IncomingPeerRequestConnectEvent(channel));
                         this.abortController.abort();
                         break;
                     }
-                    case OTRChannelState.CLOSED: {
+                    case ChatChannelState.CLOSED: {
                         this.setState(IncomingPeerRequestState.CONNECTION_ERROR);
                         this.abortController.abort();
                         break;

@@ -1,14 +1,27 @@
 import {schema, Schema, Type} from 'avsc';
 
+const WRAP_UNIONS = true;
+
+type DefSchema = {name: string, schema: schema.DefinedType, deps: string[], logicalType?: string};
+
 type Context = {
     logicalTypes: Partial<Record<string, string>>,
     dst: string,
     referencedTypes: Set<string>,
-    definedTypes: Set<string>
+    definedTypes: Set<string>,
+    depsScratch: string[],
+    referencedLogicalTypes: Set<string>,
+    defSchemas: DefSchema[]
 };
 
 const unionToTypescript = (types: schema.DefinedType[], ctx: Context): string => {
-    return types.map(type => avroTypeToTypescript(type, ctx)).join(' | ');
+    const unionMember = (type: schema.DefinedType): string => {
+        const convertedType = avroTypeToTypescript(type, ctx);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!WRAP_UNIONS) return convertedType;
+        return `{${convertedType}: ${convertedType}}`;
+    };
+    return types.map(type => unionMember(type)).join(' | ');
 };
 
 const schemaToTypescript = (schema: schema.AvroSchema, ctx: Context): string => {
@@ -20,8 +33,12 @@ const schemaToTypescript = (schema: schema.AvroSchema, ctx: Context): string => 
 
 type SchemaResult = {
     generatedCode: string,
+    schema: schema.AvroSchema,
     referencedTypes: Set<string>,
-    definedTypes: Set<string>
+    definedTypes: Set<string>,
+    depsScratch: string[],
+    referencedLogicalTypes: Set<string>,
+    defSchemas: DefSchema[]
 };
 
 const fullSchemaToTypescript = (
@@ -32,13 +49,20 @@ const fullSchemaToTypescript = (
         logicalTypes,
         dst: '',
         referencedTypes: new Set(),
-        definedTypes: new Set()
+        definedTypes: new Set(),
+        depsScratch: [],
+        referencedLogicalTypes: new Set(),
+        defSchemas: []
     };
     schemaToTypescript(schema, ctx);
     return {
         generatedCode: ctx.dst,
+        schema,
         referencedTypes: ctx.referencedTypes,
-        definedTypes: ctx.definedTypes
+        definedTypes: ctx.definedTypes,
+        depsScratch: [],
+        referencedLogicalTypes: ctx.referencedLogicalTypes,
+        defSchemas: ctx.defSchemas
     };
 };
 
@@ -47,6 +71,8 @@ const resolveImports = (schemas: {result: SchemaResult, filename: string}[]): {
     filename: string
 }[] => {
     const processed = [];
+    const avroPrefix = (str: string): string => 'Avro' + str.replace(/^[a-z]/, v => v.toUpperCase());
+    const logicalPrefix = (str: string): string => 'Logical' + str.replace(/^[a-z]/, v => v.toUpperCase());
     for (const schema of schemas) {
         const importMap = new Map<string, Set<string>>();
         for (const referencedType of schema.result.referencedTypes.values()) {
@@ -64,12 +90,34 @@ const resolveImports = (schemas: {result: SchemaResult, filename: string}[]): {
         }
         const importsArr = [];
         for (const [filename, imports] of importMap.entries()) {
-            importsArr.push({filename, imports: Array.from(imports).sort()});
+            const fileImports = Array.from(imports).sort();
+            for (let i = 0, len = fileImports.length; i < len; i++) {
+                fileImports.push(avroPrefix(fileImports[i]));
+            }
+            importsArr.push({filename, imports: fileImports});
         }
         importsArr.sort((a, b) => a.filename.localeCompare(b.filename, 'en-US'));
 
         const importsHeader = importsArr.map(({filename, imports}) => `import {${imports.join(', ')}} from './${filename.replace(/\.[a-zA-Z]+$/, '')}';`).join('\n');
-        processed.push({code: `${importsHeader}\n\n${schema.result.generatedCode}`, filename: schema.filename});
+
+        const schemaExports = [];
+        for (const {name, schema: typeSchema, deps, logicalType} of schema.result.defSchemas) {
+            const registry: string[] = [];
+            for (const dep of deps) {
+                registry.push(`${dep}: ${avroPrefix(dep)}`);
+            }
+            const registryOption = registry.length ? `, registry: {${registry.join(', ')}}` : '';
+            const logicalRegistryOption = logicalType ? `, logicalTypes: {${logicalType}: ${logicalPrefix(logicalType)}}` : '';
+            const schemaExport = `export const ${avroPrefix(name)} = Type.forSchema(${JSON.stringify(typeSchema)}, {wrapUnions: ${String(WRAP_UNIONS)}${registryOption}${logicalRegistryOption}})`;
+            schemaExports.push(schemaExport);
+        }
+        const typeImport = schemaExports.length > 0 ? "import {Type} from 'avsc';\n\n" : '';
+
+        const logicalTypesArr = Array.from(schema.result.referencedLogicalTypes).sort()
+            .map(t => logicalPrefix(t));
+        const logicalTypeReExports = logicalTypesArr.length > 0 ? `import {${logicalTypesArr.join(', ')}} from '../util/logical-types';\n\n` : '';
+
+        processed.push({code: `${typeImport}${importsHeader}\n\n${logicalTypeReExports}${schema.result.generatedCode}\n\n${schemaExports.join('\n\n')}`, filename: schema.filename});
     }
     return processed;
 };
@@ -110,19 +158,26 @@ const mapToTypescript = (map: schema.MapType, ctx: Context): string => {
 const fixedToTypescript = (avroType: schema.FixedType, ctx: Context): string => {
     ctx.dst += `export type ${avroType.name} = ArrayBuffer;\n\n`;
     ctx.definedTypes.add(avroType.name);
+    ctx.defSchemas.push({name: avroType.name, schema: avroType, deps: []});
     return avroType.name;
 };
 
 const recordToTypescript = (avroType: schema.RecordType, ctx: Context): string => {
+    // track direct dependencies only
+    const oldDeps = ctx.depsScratch;
+    ctx.depsScratch = [];
     const fields = avroType.fields.map(field => fieldToTypescript(field, ctx));
     ctx.dst += `export type ${avroType.name} = {${fields.join('\n')}};\n\n`;
     ctx.definedTypes.add(avroType.name);
+    ctx.defSchemas.push({name: avroType.name, schema: avroType, deps: ctx.depsScratch});
+    ctx.depsScratch = oldDeps;
     return avroType.name;
 };
 
 const enumToTypescript = (avroType: schema.EnumType, ctx: Context): string => {
     ctx.dst += `export enum ${avroType.name} {${avroType.symbols.join(',\n')}}\n\n`;
     ctx.definedTypes.add(avroType.name);
+    ctx.defSchemas.push({name: avroType.name, schema: avroType, deps: []});
     return avroType.name;
 };
 
@@ -131,6 +186,7 @@ const avroTypeToTypescript = (avroType: schema.DefinedType, ctx: Context): strin
         const primitive = primitiveToTypescript(avroType);
         if (primitive) return primitive;
         ctx.referencedTypes.add(avroType);
+        ctx.depsScratch.push(avroType);
         return avroType;
     }
 
@@ -140,6 +196,13 @@ const avroTypeToTypescript = (avroType: schema.DefinedType, ctx: Context): strin
         if ('name' in avroType && typeof avroType.name === 'string') {
             ctx.dst += `export type ${avroType.name} = ${mappedLogicalType};\n\n`;
             ctx.definedTypes.add(avroType.name);
+            ctx.referencedLogicalTypes.add(avroType.name);
+            ctx.defSchemas.push({
+                name: avroType.name,
+                schema: avroType,
+                deps: ctx.depsScratch,
+                logicalType: avroType.logicalType
+            });
         }
         return mappedLogicalType;
     }

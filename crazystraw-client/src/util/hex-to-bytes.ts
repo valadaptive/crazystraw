@@ -9,7 +9,7 @@ const hexToBytes = (hex: string): ArrayBuffer => {
 
     const data = new Uint8Array(hex.length >>> 1);
     for (let i = 0; i < data.length; i++) {
-        const slice = hex.slice(i << 1, (i << 1) + 1);
+        const slice = hex.slice(i << 1, (i << 1) + 2);
         data[i] = parseInt(slice, 16);
     }
 

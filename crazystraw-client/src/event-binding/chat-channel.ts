@@ -2,15 +2,15 @@ import type {AppState} from '../util/state';
 
 import {signal, Signal} from '@preact/signals';
 
-import {OTRChannel, OTRChannelState} from '../rtc/otr';
+import {ChatChannel, ChatChannelState} from '../rtc/chat';
 
-export type SignalizedOTRChannel = {
-    state: Signal<OTRChannelState>,
-    channel: OTRChannel,
+export type SignalizedChatChannel = {
+    state: Signal<ChatChannelState>,
+    channel: ChatChannel,
     cleanup: () => void
 };
 
-const signalize = (store: AppState, channel: OTRChannel): SignalizedOTRChannel => {
+const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel => {
     const stateSignal = signal(channel.state);
     const abortController = new AbortController();
 

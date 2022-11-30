@@ -1,8 +1,8 @@
 const bytesToHex = (bytes: ArrayBuffer | Uint8Array): string => {
-    const dv = new DataView('buffer' in bytes ? bytes.buffer : bytes);
+    const arr = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
     let result = '';
-    for (let i = 0; i < dv.byteLength; i++) {
-        const byte = dv.getUint8(i);
+    for (let i = 0; i < arr.length; i++) {
+        const byte = arr[i];
         if (byte < 16) result += '0';
         result += byte.toString(16);
     }

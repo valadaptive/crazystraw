@@ -4,7 +4,7 @@
     "fields": [
         {"name": "previousHash", "type": [
             "null",
-            {"name": "Sha256", "type": "fixed", "size": "32"}
+            {"name": "Sha256", "type": "fixed", "size": 32}
         ]}
     ]
 }

@@ -238,30 +238,6 @@ GatewayConnectionMessageEvent
     }
 
     /**
-     * Send a message, or enqueue it to be sent after authenticating.
-     * @param message The message to send.
-     * @returns A promise that resolves with the WebSocket that the message was (eventually) sent over.
-     */
-    private async sendOrEnqueue (
-        message: Unsequenced<ClientMessage>,
-        signal?: AbortSignal
-    ): Promise<{ws: WebSocket, seq: number}> {
-        let {ws} = this;
-        if (!ws || !this.authenticated) {
-            ws = await new Promise<WebSocket>((resolve, reject) => {
-                this.onAuthenticationPromises.push({resolve, reject});
-            });
-        }
-
-        if (signal && signal.aborted) throw OPERATION_CANCELLED;
-
-        // TODO: is there a race condition where a websocket could respond to our message while we're still awaiting
-        // sendOrEnqueue?
-        const seq = this.sendTo(ws, message);
-        return {ws, seq};
-    }
-
-    /**
      * Send a peer request and wait for it to be accepted, rejected, or errored.
      * @param peerIdentity The peer's identity string.
      * @param connectionID Connection UUID.
@@ -269,7 +245,14 @@ GatewayConnectionMessageEvent
      * @returns when the peer request is accepted, or errors when it is rejected.
      */
     public async sendPeerRequest (peerIdentity: string, connectionID: string, signal: AbortSignal): Promise<void> {
-        const {ws, seq} = await this.sendOrEnqueue({type: GatewayMessageType.PEER_REQUEST, peerIdentity, connectionID});
+        const message = {type: GatewayMessageType.PEER_REQUEST, peerIdentity, connectionID} as const;
+        let {ws} = this;
+        if (!ws || !this.authenticated) {
+            ws = await new Promise<WebSocket>((resolve, reject) => {
+                this.onAuthenticationPromises.push({resolve, reject});
+            });
+        }
+        this.sendTo(ws, message);
 
         const response = await this.waitFor(
             ws,
@@ -277,7 +260,7 @@ GatewayConnectionMessageEvent
                 message.type === GatewayMessageType.PEER_REQUEST_ACCEPTED ||
                 message.type === GatewayMessageType.PEER_REQUEST_REJECTED ||
                 message.type === GatewayMessageType.PEER_OFFLINE
-            ) && message.for === seq,
+            ) && message.connectionID === connectionID,
             0,
             signal
         );

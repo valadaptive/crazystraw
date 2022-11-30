@@ -1,19 +1,55 @@
-import {EditMessage} from './edit-message';
-import {Message} from './message';
-import {Profile} from './profile';
-import {RequestProfile} from './request-profile';
-import {uuid} from './uuid';
+import {Type} from 'avsc';
 
-export enum ChatDataType {
-    MESSAGE,
-    EDIT_MESSAGE,
-    ACK,
-    REQUEST_PROFILE,
-    PROFILE,
-}
+import {
+    Acknowledgement,
+    AvroAcknowledgement
+} from './acknowledgement';
+import {EditMessage, AvroEditMessage} from './edit-message';
+import {Message, AvroMessage} from './message';
+import {Profile, AvroProfile} from './profile';
+import {
+    RequestProfile,
+    AvroRequestProfile
+} from './request-profile';
+import {uuid, AvroUuid} from './uuid';
 
 export type ChatData = {
     id: uuid;
-    type: ChatDataType;
-    data: Message | EditMessage | RequestProfile | Profile;
+    data:
+    | {Message: Message}
+    | {EditMessage: EditMessage}
+    | {Acknowledgement: Acknowledgement}
+    | {RequestProfile: RequestProfile}
+    | {Profile: Profile};
 };
+
+export const AvroChatData = Type.forSchema(
+    {
+        name: 'ChatData',
+        type: 'record',
+        fields: [
+            {name: 'id', type: 'uuid'},
+            {
+                name: 'data',
+                type: [
+                    'Message',
+                    'EditMessage',
+                    'Acknowledgement',
+                    'RequestProfile',
+                    'Profile'
+                ]
+            }
+        ]
+    },
+    {
+        wrapUnions: true,
+        registry: {
+            uuid: AvroUuid,
+            Message: AvroMessage,
+            EditMessage: AvroEditMessage,
+            Acknowledgement: AvroAcknowledgement,
+            RequestProfile: AvroRequestProfile,
+            Profile: AvroProfile
+        }
+    }
+);

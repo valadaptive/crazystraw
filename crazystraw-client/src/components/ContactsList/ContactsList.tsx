@@ -17,15 +17,15 @@ import {
     IncomingPeerRequestState,
     OutgoingPeerRequestState
 } from '../../rtc/peer-request';
-import {OTRChannel, OTRChannelState} from '../../rtc/otr';
+import {ChatChannel, ChatChannelState} from '../../rtc/chat';
 
 import type {SignalizedIncomingPeerRequest} from '../../event-binding/incoming-peer-request';
 import type {SignalizedOutgoingPeerRequest} from '../../event-binding/outgoing-peer-request';
-import type {SignalizedOTRChannel} from '../../event-binding/otr-channel';
+import type {SignalizedChatChannel} from '../../event-binding/chat-channel';
 
 const ContactItem = ({contact, connectionInfo}: {
     contact: Omit<Contact, 'lastMessageTimestamp'>,
-    connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedOTRChannel | null
+    connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedChatChannel | null
 }): JSX.Element => {
     let avatar: Blob | string | null = contact.profile ? contact.profile.avatar : null;
     try {
@@ -79,17 +79,17 @@ const ContactItem = ({contact, connectionInfo}: {
             }
         }
 
-        if ('channel' in connectionInfo && connectionInfo.channel instanceof OTRChannel) {
+        if ('channel' in connectionInfo && connectionInfo.channel instanceof ChatChannel) {
             switch (connectionInfo.state.value) {
-                case OTRChannelState.CONNECTING:
+                case ChatChannelState.CONNECTING:
                     return ['Connecting...', IndicatorState.LOADING] as const;
-                case OTRChannelState.AUTHENTICATING:
+                case ChatChannelState.AUTHENTICATING:
                     return ['Authenticating...', IndicatorState.LOADING] as const;
-                case OTRChannelState.CONNECTED:
+                case ChatChannelState.CONNECTED:
                     return ['Connected', IndicatorState.SUCCESS] as const;
-                case OTRChannelState.DISCONNECTED:
+                case ChatChannelState.DISCONNECTED:
                     return ['Reconnecting...', IndicatorState.LOADING] as const;
-                case OTRChannelState.CLOSED:
+                case ChatChannelState.CLOSED:
                     return ['Closed', IndicatorState.FAILED] as const;
                 default:
                     throw new Error('Unreachable');
@@ -113,7 +113,7 @@ const ContactItem = ({contact, connectionInfo}: {
 
     const channel = connectionInfo &&
         'channel' in connectionInfo &&
-        (connectionInfo.channel instanceof OTRChannel) ?
+        (connectionInfo.channel instanceof ChatChannel) ?
         connectionInfo.channel :
         undefined;
 
@@ -131,7 +131,7 @@ const ContactItem = ({contact, connectionInfo}: {
     const includeOutgoingRequestButtons = outgoingRequest &&
         connectionInfo?.state.value === OutgoingPeerRequestState.PENDING;
     const includeChannelButtons = channel &&
-        connectionInfo?.state.value !== OTRChannelState.CLOSED;
+        connectionInfo?.state.value !== ChatChannelState.CLOSED;
 
     return (
         <div className={style.contact}>
@@ -172,7 +172,7 @@ const ContactsList = (): JSX.Element => {
 
     type ContactListing = {
         contact: Contact,
-        connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedOTRChannel | null
+        connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedChatChannel | null
     };
 
     const sortedContacts: ContactListing[] = useComputed(() => {

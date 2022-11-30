@@ -71,6 +71,13 @@ function baseConfig () {
                 'react-dom': 'preact-compat',
                 'preact-compat': 'preact-compat',
                 'react-addons-css-transition-group': 'preact-css-transition-group'
+            },
+            fallback: {
+                buffer: require.resolve('buffer'),
+                util: false,
+                stream: require.resolve('readable-stream'),
+                path: false,
+                zlib: false
             }
         },
 
@@ -196,7 +203,8 @@ function baseConfig () {
             ),
             new webpack.ProvidePlugin({
                 h: ['preact', 'h'],
-                Fragment: ['preact', 'Fragment']
+                Fragment: ['preact', 'Fragment'],
+                process: 'process/browser'
             }),
             // Fix for https://github.com/webpack-contrib/mini-css-extract-plugin/issues/151
             new RemoveEmptyScriptsPlugin(),
@@ -237,8 +245,6 @@ function baseConfig () {
         mode: isProd ? 'production' : 'development',
 
         devtool: isWatch ? 'eval-cheap-module-source-map' : 'source-map',
-
-        node: false
     };
 }
 
