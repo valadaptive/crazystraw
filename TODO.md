@@ -1,2 +1,5 @@
-- Contacts list / connection establishing state
-- The entire chat part
+- Contacts list storage, peer discovery prompt
+- Profile creation, editing, export, import
+- Chat box
+- Chat history and storage?
+- Self-hosted STUN/TURN (with authentication?)
