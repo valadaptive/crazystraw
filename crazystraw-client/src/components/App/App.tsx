@@ -10,7 +10,7 @@ import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
 
 import createProfileAction from '../../actions/create-profile';
-import createPeerRequestAction from '../../actions/create-peer-request';
+import createOutgoingPeerRequestAction from '../../actions/create-outgoing-peer-request';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
@@ -18,16 +18,16 @@ import {OutgoingPeerRequest} from '../../rtc/peer-request';
 import {OTRChannelState} from '../../rtc/otr';
 
 const App = (): JSX.Element => {
-    const {profile, savedProfile, profileState} = useAppState();
+    const {profileData} = useAppState();
     const createProfile = useAction(createProfileAction);
-    const createPeerRequest = useAction(createPeerRequestAction);
+    const createPeerRequest = useAction(createOutgoingPeerRequestAction);
 
     const prompt = useComputed(() => {
-        if (profileState.value === ProfileState.NONEXISTENT) {
+        if (profileData.value.state === ProfileState.NONEXISTENT) {
             return (
                 <SetupPrompt />
             );
-        } else if (profileState.value === ProfileState.SAVED_BUT_NOT_LOADED) {
+        } else if (profileData.value.state === ProfileState.SAVED_BUT_NOT_LOADED) {
             return (
                 <PasswordPrompt />
             );

@@ -1,8 +1,7 @@
-import {batch} from '@preact/signals';
-
-import {PersonalIdentity} from '../rtc/identity';
 import {PersonalProfile} from '../rtc/profile';
 import {AppState, ProfileState} from '../util/state';
+
+import setProfile from './set-profile';
 
 const createProfile = async (
     store: AppState,
@@ -13,19 +12,13 @@ const createProfile = async (
     },
     password: string
 ): Promise<void> => {
-    store.profileState.value = ProfileState.GENERATING;
+    store.profileData.value = {state: ProfileState.GENERATING};
 
     try {
-        const identity = await PersonalIdentity.generate();
-        const profile = new PersonalProfile(identity, profileData.handle, profileData.avatar, profileData.bio);
-        const exportedProfile = await profile.export(password);
-        batch(() => {
-            store.profileState.value = ProfileState.LOADED;
-            store.savedProfile.value = exportedProfile;
-            store.profile.value = profile;
-        });
+        const profile = await PersonalProfile.create(profileData, password);
+        setProfile(store, profile);
     } catch (err) {
-        store.profileState.value = ProfileState.NONEXISTENT;
+        setProfile(store, null);
     }
 };
 

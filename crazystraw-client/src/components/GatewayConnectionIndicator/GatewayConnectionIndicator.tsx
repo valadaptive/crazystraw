@@ -1,9 +1,9 @@
 import style from './style.scss';
 
 import type {JSX} from 'preact';
-import {useComputed} from '@preact/signals';
+import {useMemo} from 'preact/hooks';
 
-import {useAppState} from '../../util/state';
+import {useGatewayConnection} from '../../util/state';
 
 import Indicator, {IndicatorState} from '../Indicator/Indicator';
 import Icon from '../Icon/Icon';
@@ -11,12 +11,12 @@ import Icon from '../Icon/Icon';
 import {GatewayConnectionStateType} from '../../rtc/gateway';
 
 const GatewayConnectionIndicator = (): JSX.Element => {
-    const {gatewayConnection} = useAppState();
+    const gatewayConnection = useGatewayConnection();
 
-    const [message, indicatorState] = useComputed(() => {
-        if (!gatewayConnection.value) return ['No connection', IndicatorState.DISABLED] as const;
+    const [message, indicatorState] = useMemo(() => {
+        if (!gatewayConnection) return ['No connection', IndicatorState.DISABLED] as const;
 
-        const connectionState = gatewayConnection.value.state.value;
+        const connectionState = gatewayConnection.state.value;
         switch (connectionState.type) {
             case GatewayConnectionStateType.CONNECTING:
                 return ['Connecting...', IndicatorState.LOADING] as const;
@@ -27,7 +27,7 @@ const GatewayConnectionIndicator = (): JSX.Element => {
             case GatewayConnectionStateType.CLOSED:
                 return [`Connection closed (${connectionState.reason})`, IndicatorState.FAILED] as const;
         }
-    }).value;
+    }, [gatewayConnection?.state.value]);
 
     return (
         <div className={style.connectionIndicator}>

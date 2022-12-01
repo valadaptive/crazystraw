@@ -1,15 +1,13 @@
 import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
-import {signal, effect, Signal, batch} from '@preact/signals';
-
-import setupEventLogic from './event-logic';
+import {signal, effect, Signal} from '@preact/signals';
 
 import {Profile, PersonalProfile} from '../rtc/profile';
-import {GatewayConnection, GatewayConnectionState} from '../rtc/gateway';
 
 import {SignalizedIncomingPeerRequest} from '../event-binding/incoming-peer-request';
 import {SignalizedOutgoingPeerRequest} from '../event-binding/outgoing-peer-request';
 import {SignalizedChatChannel} from '../event-binding/chat-channel';
+import {SignalizedGatewayConnection} from '../event-binding/gateway-connection';
 
 export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
@@ -28,18 +26,20 @@ export type Contact = {
 // Thanks TypeScript!
 type Dictionary<T> = {[x: string]: T};
 
+type ProfileData = {
+    state: ProfileState.SAVED_BUT_NOT_LOADED,
+    savedProfile: string
+} | {state: ProfileState.NONEXISTENT | ProfileState.GENERATING} | {
+    state: ProfileState.LOADED,
+    profile: PersonalProfile,
+    gatewayConnection: SignalizedGatewayConnection
+};
+
 /**
  * Global application state
  */
 export type AppState = {
-    savedProfile: Signal<string | null>,
-    profile: Signal<PersonalProfile | null>
-    profileState: Signal<ProfileState>,
-    gatewayConnection: Signal<{
-        connection: GatewayConnection,
-        state: Signal<GatewayConnectionState>,
-        cleanup: () => void
-    } | null>,
+    profileData: Signal<ProfileData>,
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
     openChannels: Signal<Dictionary<SignalizedChatChannel>>,
@@ -47,36 +47,37 @@ export type AppState = {
 };
 
 export const createStore = (): AppState => {
+    const savedProfile = localStorage.getItem('profile');
+
+    const profileData = savedProfile === null ? {state: ProfileState.NONEXISTENT} as const : {
+        state: ProfileState.SAVED_BUT_NOT_LOADED,
+        savedProfile
+    } as const;
+
     const store: AppState = {
-        savedProfile: signal(null),
-        profile: signal(null),
-        profileState: signal(ProfileState.NONEXISTENT),
-        gatewayConnection: signal(null),
+        profileData: signal(profileData),
         incomingRequests: signal({}),
         outgoingRequests: signal({}),
         openChannels: signal({}),
         contacts: signal({})
     };
 
-    const savedProfile = localStorage.getItem('profile');
-    if (savedProfile !== null) {
-        batch(() => {
-            store.savedProfile.value = savedProfile;
-            store.profileState.value = ProfileState.SAVED_BUT_NOT_LOADED;
-        });
-    }
-
     // Persist profile to storage
     effect(() => {
-        const savedIdentity = store.savedProfile.value;
-        if (savedIdentity === null) {
-            localStorage.removeItem('profile');
-        } else {
-            localStorage.setItem('profile', savedIdentity);
-        }
-    });
+        const profile = store.profileData.value;
 
-    setupEventLogic(store);
+        if (profile.state === ProfileState.NONEXISTENT) {
+            localStorage.removeItem('profile');
+            return;
+        }
+
+        if (profile.state !== ProfileState.LOADED) return;
+
+        void (async (): Promise<void> => {
+            const savedProfile = await profile.profile.export();
+            localStorage.setItem('profile', savedProfile);
+        })();
+    });
 
     return store;
 };
@@ -96,4 +97,10 @@ export const useAction = <T extends unknown[]>(
     func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => unknown) => {
     const context = useAppState();
     return useMemo(() => func.bind(null, context), [context]);
+};
+
+export const useGatewayConnection = (): SignalizedGatewayConnection | null => {
+    const {profileData} = useAppState();
+    if (profileData.value.state !== ProfileState.LOADED) return null;
+    return profileData.value.gatewayConnection;
 };

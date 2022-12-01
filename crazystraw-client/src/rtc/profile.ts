@@ -20,22 +20,24 @@ class Profile {
 
 class PersonalProfile extends Profile {
     public identity: PersonalIdentity;
+    public savedIdentity: Partial<Record<string, unknown>>;
 
-    constructor (
+    private constructor (
         identity: PersonalIdentity,
+        savedIdentity: Partial<Record<string, unknown>>,
         handle: string,
         avatar: Blob | null,
         bio: string | null
     ) {
         super(handle, avatar, bio);
         this.identity = identity;
+        this.savedIdentity = savedIdentity;
     }
 
-    public async export (password: string): Promise<string> {
-        const exportedIdentity = await this.identity.export(password);
+    public async export (): Promise<string> {
         const avatar = this.avatar ? fromByteArray(new Uint8Array(await this.avatar.arrayBuffer())) : null;
         return JSON.stringify({
-            identity: exportedIdentity,
+            identity: this.savedIdentity,
             handle: this.handle,
             avatar,
             bio: this.bio
@@ -57,7 +59,15 @@ class PersonalProfile extends Profile {
         const identity = await PersonalIdentity.import(identityJson, password);
         const avatar = avatarStr ? new Blob([toByteArray(avatarStr)]) : null;
 
-        return new PersonalProfile(identity, handle, avatar, bio);
+        return new PersonalProfile(identity, identityJson, handle, avatar, bio);
+    }
+
+    public static async create (profile: Profile, password: string): Promise<PersonalProfile> {
+        const identity = await PersonalIdentity.generate();
+        const savedIdentity = await identity.export(password);
+        const {handle, avatar, bio} = profile;
+        return new PersonalProfile(identity, savedIdentity, handle, avatar, bio);
+
     }
 }
 

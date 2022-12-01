@@ -7,24 +7,27 @@ import {fromByteArray} from 'base64-js';
 import Avatar from '../Avatar/Avatar';
 import GatewayConnectionIndicator from '../GatewayConnectionIndicator/GatewayConnectionIndicator';
 
-import deleteProfileAction from '../../actions/delete-profile';
+import setProfileAction from '../../actions/set-profile';
 
-import {useAppState, useAction} from '../../util/state';
+import {useAppState, useAction, ProfileState} from '../../util/state';
 
 const TopBar = (): JSX.Element => {
-    const {profile} = useAppState();
-    const deleteProfile = useAction(deleteProfileAction);
+    const {profileData} = useAppState();
+    const setProfile = useAction(setProfileAction);
 
     const profileInfo = useComputed(() => {
-        const profileData = profile.value;
+        const profileState = profileData.value.state;
+        const profile = profileState === ProfileState.LOADED ? profileData.value.profile : null;
 
         return <div className={style.profileInfo}>
-            <Avatar size={32} data={profileData?.avatar ?? null} />
-            <div className={style.handle}>{profileData?.handle ?? 'No user data'}</div>
-            {profileData ?
-                <div className={style.fingerprint}>{fromByteArray(profileData.identity.publicKeyFingerprint)}</div> :
+            <Avatar size={32} data={profile?.avatar ?? null} />
+            <div className={style.handle}>{profile?.handle ?? 'No user data'}</div>
+            {profile ?
+                <>
+                    <div className={style.fingerprint}>{fromByteArray(profile.identity.publicKeyFingerprint)}</div>
+                    <button onClick={(): unknown => setProfile(null)}>Delete profile</button>
+                </> :
                 null}
-            {profileData ? <button onClick={deleteProfile}>Delete profile</button> : null}
         </div>;
     }).value;
 

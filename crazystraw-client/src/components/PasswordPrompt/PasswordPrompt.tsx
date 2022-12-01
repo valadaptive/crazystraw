@@ -3,14 +3,14 @@ import style from './style.scss';
 import type {JSX} from 'preact';
 import {useMemo, useState} from 'preact/hooks';
 
-import importProfileAction from '../../actions/import-profile';
+import setProfileAction from '../../actions/set-profile';
 
-import {useAppState, useAction} from '../../util/state';
+import {useAppState, useAction, ProfileState} from '../../util/state';
 
 import {PersonalProfile} from '../../rtc/profile';
 
 const PasswordPrompt = (): JSX.Element | null => {
-    const importProfile = useAction(importProfileAction);
+    const setProfile = useAction(setProfileAction);
     const [password, setPassword] = useState('');
     const [errored, setErrored] = useState(false);
 
@@ -18,19 +18,19 @@ const PasswordPrompt = (): JSX.Element | null => {
         setPassword((event.target as HTMLInputElement).value);
     }, [setPassword]);
 
-    const {savedProfile} = useAppState();
+    const {profileData} = useAppState();
 
-    const savedProfileValue = savedProfile.value;
-    if (!savedProfileValue) return null;
+    if (profileData.value.state !== ProfileState.SAVED_BUT_NOT_LOADED) return null;
+    const {savedProfile} = profileData.value;
 
     const decryptProfileIdentity = useMemo(() => async () => {
         try {
-            const profile = await PersonalProfile.import(savedProfileValue, password);
-            importProfile(profile, savedProfileValue);
+            const profile = await PersonalProfile.import(savedProfile, password);
+            setProfile(profile);
         } catch (err) {
             setErrored(true);
         }
-    }, [savedProfileValue, password]);
+    }, [savedProfile, password]);
 
     return (
         <div>
