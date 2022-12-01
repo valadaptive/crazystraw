@@ -28,7 +28,7 @@ const main = async (): Promise<void> => {
     for (const schemaName of schemas) {
         const json = await readFile(resolve(dirPath, schemaName), 'utf-8');
         const schema = await JSON.parse(json) as schema.AvroSchema;
-        const result = fullSchemaToTypescript(schema, {uuid: 'string'});
+        const result = fullSchemaToTypescript(schema, {uid: 'string'});
         partialResults.push({result, filename: schemaName.replace(/\.json$/, '.ts')});
     }
 

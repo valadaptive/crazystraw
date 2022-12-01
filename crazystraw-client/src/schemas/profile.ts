@@ -2,8 +2,8 @@ import {Type} from 'avsc';
 
 export type Profile = {
     handle: string;
-    bio: string;
-    avatar: ArrayBuffer;
+    bio: null | {string: string};
+    avatar: null | {bytes: ArrayBuffer};
 };
 
 export const AvroProfile = Type.forSchema(
@@ -12,8 +12,8 @@ export const AvroProfile = Type.forSchema(
         type: 'record',
         fields: [
             {name: 'handle', type: 'string'},
-            {name: 'bio', type: 'string'},
-            {name: 'avatar', type: 'bytes'}
+            {name: 'bio', type: ['null', 'string']},
+            {name: 'avatar', type: ['null', 'bytes']}
         ]
     },
     {wrapUnions: true}

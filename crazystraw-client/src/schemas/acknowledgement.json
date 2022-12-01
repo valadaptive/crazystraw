@@ -2,6 +2,6 @@
     "name": "Acknowledgement",
     "type": "record",
     "fields": [
-        {"name": "referencedID", "type": "uuid"}
+        {"name": "referencedID", "type": "uid"}
     ]
 }

@@ -2,7 +2,7 @@
     "name": "Attachment",
     "type": "record",
     "fields": [
-        {"name": "id", "type": "uuid"},
+        {"name": "id", "type": "uid"},
         {"name": "name", "type": "string"},
         {"name": "width", "type": ["null", "int"]},
         {"name": "height", "type": ["null", "int"]},

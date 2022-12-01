@@ -3,7 +3,7 @@
     "type": "record",
     "fields": [
         {"name": "handle", "type": "string"},
-        {"name": "bio", "type": "string"},
-        {"name": "avatar", "type": "bytes"}
+        {"name": "bio", "type": ["null", "string"]},
+        {"name": "avatar", "type": ["null", "bytes"]}
     ]
 }

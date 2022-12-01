@@ -30,7 +30,7 @@ function baseConfig () {
 
     const browsers = 'defaults';
     const postcssPlugins = [autoprefixer({overrideBrowserslist: browsers})];
-    const internalStyles = [source('components')];
+    const internalStyles = [source('components'), source('css')];
     const copyPatterns = [
         // copy any static files
         existsSync(source('assets')) && {from: resolve(source('assets')), to: 'assets'},

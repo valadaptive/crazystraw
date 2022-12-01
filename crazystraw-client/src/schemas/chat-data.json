@@ -2,7 +2,7 @@
     "name": "ChatData",
     "type": "record",
     "fields": [
-        {"name": "id", "type": "uuid"},
+        {"name": "id", "type": "uid"},
         {"name": "data", "type": [
             "Message",
             "EditMessage",

@@ -25,6 +25,11 @@ const setProfile = (store: AppState, profile: PersonalProfile | null): void => {
         profile,
         gatewayConnection: connectGatewayConnection(store, new GatewayConnection(CONNECTION_SERVER, profile.identity))
     };
+
+    // TODO: stop conflating profiles with public keys/identities
+    /*for (const {channel} of Object.values(store.openChannels.value)) {
+        void channel.sendProfile(profile);
+    }*/
 };
 
 export default setProfile;

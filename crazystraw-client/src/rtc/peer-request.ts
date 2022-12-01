@@ -12,6 +12,7 @@ import {PersonalIdentity} from './identity';
 import {ChatChannel, ChatChannelState} from './chat';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
+import {generateID} from '../util/id';
 
 export const enum OutgoingPeerRequestState {
     /** The peer request is currently waiting for the peer to accept or reject it. */
@@ -88,7 +89,7 @@ OutgoingPeerRequestStateChangeEvent
         this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
         this.gateway = gateway;
-        this.connectionID = crypto.randomUUID();
+        this.connectionID = generateID();
         this.abortController = new AbortController();
 
         void this.send();

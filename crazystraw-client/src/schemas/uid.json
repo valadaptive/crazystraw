@@ -1,0 +1,6 @@
+{
+    "name": "uid",
+    "type": "fixed",
+    "size": 16,
+    "logicalType": "uid"
+}

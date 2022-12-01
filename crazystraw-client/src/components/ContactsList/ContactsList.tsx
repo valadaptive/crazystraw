@@ -27,11 +27,15 @@ const ContactItem = ({contact, connectionInfo}: {
     contact: Omit<Contact, 'lastMessageTimestamp'>,
     connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedChatChannel | null
 }): JSX.Element => {
-    let avatar: Blob | string | null = contact.profile ? contact.profile.avatar : null;
-    try {
-        avatar = fingerprintIcon(contact.identity);
-    } catch (err) {
-        // The digest may be incorrect
+    let avatar: Blob | string | null = null;
+    if (contact.profile) {
+        avatar = contact.profile.avatar;
+    } else {
+        try {
+            avatar = fingerprintIcon(contact.identity);
+        } catch (err) {
+            // The digest may be incorrect
+        }
     }
 
     const connectionInfoLine = useMemo(() => {
@@ -177,7 +181,7 @@ const ContactsList = (): JSX.Element => {
 
     const sortedContacts: ContactListing[] = useComputed(() => {
         const contactsArr = [];
-        for (const contact of Object.values(contacts.value)) {
+        for (const {value: contact} of Object.values(contacts.value)) {
             const {identity} = contact;
             let connectionInfo = null;
             if (Object.prototype.hasOwnProperty.call(incomingRequests.value, identity)) {

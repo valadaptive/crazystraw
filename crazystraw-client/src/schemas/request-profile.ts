@@ -3,7 +3,7 @@ import {Type} from 'avsc';
 export type Sha256 = ArrayBuffer;
 
 export type RequestProfile = {
-    previousHash: {null: null} | {Sha256: Sha256};
+    previousHash: null | {Sha256: Sha256};
 };
 
 export const AvroSha256 = Type.forSchema(

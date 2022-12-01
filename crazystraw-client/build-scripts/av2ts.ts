@@ -14,12 +14,18 @@ type Context = {
     defSchemas: DefSchema[]
 };
 
+const getBranchName = (type: schema.DefinedType): string => {
+    if (typeof type === 'string') return type;
+    if ('name' in type && typeof type.name === 'string') return type.name;
+    return type.type;
+};
+
 const unionToTypescript = (types: schema.DefinedType[], ctx: Context): string => {
     const unionMember = (type: schema.DefinedType): string => {
         const convertedType = avroTypeToTypescript(type, ctx);
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (!WRAP_UNIONS) return convertedType;
-        return `{${convertedType}: ${convertedType}}`;
+        if (!WRAP_UNIONS || convertedType === 'null') return convertedType;
+        return `{${getBranchName(type)}: ${convertedType}}`;
     };
     return types.map(type => unionMember(type)).join(' | ');
 };
@@ -78,7 +84,7 @@ const resolveImports = (schemas: {result: SchemaResult, filename: string}[]): {
         for (const referencedType of schema.result.referencedTypes.values()) {
             const typeFiles = schemas.filter(otherSchema => otherSchema.result.definedTypes.has(referencedType));
             if (typeFiles.length > 1) throw new Error(`Type "${referencedType}" defined in multiple schemas: ${typeFiles.map(schema => schema.filename).join(', ')}`);
-            if (typeFiles.length === 0) throw new Error(`Type ${referencedType} not defined in any files`);
+            if (typeFiles.length === 0) throw new Error(`Type ${referencedType} not defined in any files (in ${schema.filename})`);
             const typeFilename = typeFiles[0].filename;
             if (typeFilename === schema.filename) continue;
             let importsFromFile = importMap.get(typeFilename);

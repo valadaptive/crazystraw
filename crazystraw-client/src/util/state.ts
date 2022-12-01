@@ -43,7 +43,7 @@ export type AppState = {
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
     openChannels: Signal<Dictionary<SignalizedChatChannel>>,
-    contacts: Signal<Dictionary<Contact>>
+    contacts: Signal<Dictionary<Signal<Contact>>>
 };
 
 export const createStore = (): AppState => {
@@ -94,7 +94,7 @@ export const useAppState = (): AppState => {
 };
 
 export const useAction = <T extends unknown[]>(
-    func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => unknown) => {
+    func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => void) => {
     const context = useAppState();
     return useMemo(() => func.bind(null, context), [context]);
 };

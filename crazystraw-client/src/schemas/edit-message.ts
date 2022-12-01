@@ -1,9 +1,9 @@
 import {Type} from 'avsc';
 
-import {uuid, AvroUuid} from './uuid';
+import {uid, AvroUid} from './uid';
 
 export type EditMessage = {
-    messageID: uuid;
+    messageID: uid;
     newContents: string;
     timestamp: number;
 };
@@ -13,10 +13,10 @@ export const AvroEditMessage = Type.forSchema(
         name: 'EditMessage',
         type: 'record',
         fields: [
-            {name: 'messageID', type: 'uuid'},
+            {name: 'messageID', type: 'uid'},
             {name: 'newContents', type: 'string'},
             {name: 'timestamp', type: 'long'}
         ]
     },
-    {wrapUnions: true, registry: {uuid: AvroUuid}}
+    {wrapUnions: true, registry: {uid: AvroUid}}
 );

@@ -11,10 +11,10 @@ import {
     RequestProfile,
     AvroRequestProfile
 } from './request-profile';
-import {uuid, AvroUuid} from './uuid';
+import {uid, AvroUid} from './uid';
 
 export type ChatData = {
-    id: uuid;
+    id: uid;
     data:
     | {Message: Message}
     | {EditMessage: EditMessage}
@@ -28,7 +28,7 @@ export const AvroChatData = Type.forSchema(
         name: 'ChatData',
         type: 'record',
         fields: [
-            {name: 'id', type: 'uuid'},
+            {name: 'id', type: 'uid'},
             {
                 name: 'data',
                 type: [
@@ -44,7 +44,7 @@ export const AvroChatData = Type.forSchema(
     {
         wrapUnions: true,
         registry: {
-            uuid: AvroUuid,
+            uid: AvroUid,
             Message: AvroMessage,
             EditMessage: AvroEditMessage,
             Acknowledgement: AvroAcknowledgement,

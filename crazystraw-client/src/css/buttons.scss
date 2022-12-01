@@ -1,0 +1,49 @@
+@use '../colors.scss' as col;
+
+@mixin button-color($normal, $hover, $active, $disabled) {
+    background-color: $normal;
+
+    &:hover {
+        background-color: $hover;
+    }
+
+    &:active {
+        background-color: $active;
+    }
+
+    &:disabled {
+        background-color: $disabled;
+        color: rgba(255, 255, 255, 0.5);
+    }
+}
+
+button {
+    transition: background-color 0.25s ease;
+
+    background-color: col.$brand;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    font-size: 90%;
+    font-weight: 600;
+    padding: 0.675rem 0.75rem;
+
+    @include button-color(col.$brand, col.$brand-hover, col.$brand-active, col.$brand-muted);
+
+    &:disabled {
+        cursor: not-allowed;
+    }
+
+    &.green {
+        @include button-color(col.$green, col.$green-hover, col.$green-active, col.$green-muted);
+    }
+
+    &.yellow {
+        @include button-color(col.$yellow, col.$yellow-hover, col.$yellow-active, col.$yellow-muted);
+    }
+
+    &.red {
+        @include button-color(col.$red, col.$red-hover, col.$red-active, col.$red-muted);
+    }
+}

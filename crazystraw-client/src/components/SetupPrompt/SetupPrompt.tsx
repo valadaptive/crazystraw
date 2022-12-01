@@ -1,16 +1,22 @@
+import buttons from '../../css/buttons.scss';
+import prompt from '../../css/prompt.scss';
+
 import type {JSX} from 'preact';
 
 import {useMemo, useState} from 'preact/hooks';
 
 import createProfileAction from '../../actions/create-profile';
+import importSavedProfileAction from '../../actions/import-saved-profile';
 
-import {useAppState, useAction} from '../../util/state';
+import Avatar from '../Avatar/Avatar';
+
+import {useAction} from '../../util/state';
 import resizeAvatar from '../../util/resize-avatar';
 import createFileUploadDialog from '../../util/create-file-upload-dialog';
-import useBlobURL from '../../util/use-blob-url';
 
 const SetupPrompt = (): JSX.Element => {
     const createProfile = useAction(createProfileAction);
+    const importSavedProfile = useAction(importSavedProfileAction);
 
     const [handle, setHandle] = useState('');
     const [bio, setBio] = useState('');
@@ -29,7 +35,6 @@ const SetupPrompt = (): JSX.Element => {
     }, [setPassword]);
 
     const [avatar, setAvatar] = useState<Blob | null>(null);
-    const avatarURL = useBlobURL(avatar);
 
     const onClickUploadAvatar = useMemo(() => async () => {
         const file = await createFileUploadDialog({accept: 'image/*'});
@@ -38,6 +43,18 @@ const SetupPrompt = (): JSX.Element => {
         const resized = await resizeAvatar(file);
         setAvatar(resized);
     }, [setAvatar]);
+
+    const [importProfileError, setImportProfileError] = useState(false);
+    const onClickImportProfile = useMemo(() => async () => {
+        const profile = await createFileUploadDialog({accept: 'application/json'});
+        if (!profile) return;
+        try {
+            const profileText = await profile.text();
+            importSavedProfile(profileText);
+        } catch (err) {
+            setImportProfileError(true);
+        }
+    }, [importSavedProfile]);
 
     const createIdentity = useMemo(() => () => {
         createProfile({
@@ -48,35 +65,39 @@ const SetupPrompt = (): JSX.Element => {
     }, [handle, password]);
 
     return (
-        <div>
-            <div>It seems this is your first time using CrazyStraw. Enter some details:</div>
-            <div>
+        <div className={prompt.prompt}>
+            <div>This is your first time using CrazyStraw. Set up your profile:</div>
+            <div className={prompt.row}>
                 <label>Handle:</label>
-                <input type="text" value={handle} onInput={onHandleInput} />
+                <input className={prompt.grow} type="text" value={handle} onInput={onHandleInput} />
             </div>
-            <div>
+            <div className={prompt.row}>
                 <label>Avatar (optional):</label>
                 <button onClick={onClickUploadAvatar}>Upload</button>
-                {avatarURL ? <img src={avatarURL} /> : null}
+                <Avatar size={64} data={avatar} />
             </div>
-            <div>
+            <div className={prompt.stack}>
                 <label>Bio (optional):</label>
                 <textarea value={bio} onInput={onBioInput} />
             </div>
-            <hr />
+            <div className={prompt.divider} />
 
-            <div>
+            <div className={prompt.row}>
                 <label>Password:</label>
-                <input type="password" value={password} onInput={onPasswordInput} />
+                <input className={prompt.grow} type="password" value={password} onInput={onPasswordInput} />
             </div>
 
-            <button disabled={handle.length === 0 || password.length === 0} onClick={createIdentity}>Create</button>
+            <button
+                disabled={handle.length === 0 || password.length === 0}
+                onClick={createIdentity}
+                className={buttons.green}
+            >Create</button>
 
-            <hr />
+            <div className={prompt.divider} />
 
-            <div>
-                <label>Or import an identity:</label>
-                <input type="file" />
+            <div className={prompt.row}>
+                <button onClick={onClickImportProfile}>Import existing profile</button>
+                {importProfileError ? <div className={prompt.error}>Could not import profile.</div> : null}
             </div>
         </div>
     );

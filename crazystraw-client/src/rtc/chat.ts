@@ -1,16 +1,18 @@
 import {Buffer} from 'buffer';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
+import {generateID} from '../util/id';
 
 import {GatewayConnection} from './gateway';
 import {PersonalIdentity} from './identity';
 import {OTRChannel, OTRChannelState} from './otr';
+import {Profile} from './profile';
 
 import {ChatData, AvroChatData} from '../schemas/chat-data';
 import {Message} from '../schemas/message';
 import {EditMessage} from '../schemas/edit-message';
 import {RequestProfile} from '../schemas/request-profile';
-import {Profile} from '../schemas/profile';
+import {Profile as ProfileMessage} from '../schemas/profile';
 
 export const enum ChatChannelState {
     /** The connection is being initialized. */
@@ -32,6 +34,12 @@ const otrToChatChannelState = {
     [OTRChannelState.DISCONNECTED]: ChatChannelState.DISCONNECTED,
     [OTRChannelState.CLOSED]: ChatChannelState.CLOSED
 };
+
+class ChatChannelConnectEvent extends TypedEvent<'connect'> {
+    constructor () {
+        super('connect');
+    }
+}
 
 class ChatChannelStateChangeEvent extends TypedEvent<'statechange'> {
     constructor () {
@@ -80,8 +88,8 @@ class ChatChannelRequestProfileEvent extends ChatChannelDataEvent<'requestprofil
 }
 
 class ChatChannelProfileEvent extends ChatChannelDataEvent<'profile'> {
-    profile: Profile;
-    constructor (profile: Profile, uuid: string) {
+    profile: ProfileMessage;
+    constructor (profile: ProfileMessage, uuid: string) {
         super('profile', uuid);
         this.profile = profile;
     }
@@ -89,6 +97,7 @@ class ChatChannelProfileEvent extends ChatChannelDataEvent<'profile'> {
 
 export class ChatChannel extends TypedEventTarget<
 ChatChannelStateChangeEvent |
+ChatChannelConnectEvent |
 ChatChannelMessageEvent |
 ChatChannelEditMessageEvent |
 ChatChannelAcknowledgeEvent |
@@ -119,24 +128,36 @@ ChatChannelProfileEvent
         this.abortController = new AbortController();
         const {signal} = this.abortController;
 
+        let connectFired = false;
         this.otrChannel.addEventListener('statechange', () => {
             this.setState(otrToChatChannelState[this.otrChannel.state]);
+            if (this.state === ChatChannelState.CONNECTED && !connectFired) {
+                // Only fire on first connect, not reconnects
+                connectFired = true;
+                this.dispatchEvent(new ChatChannelConnectEvent());
+            }
         }, {signal});
 
         this.otrChannel.addEventListener('message', event => {
-            const data = AvroChatData.fromBuffer(Buffer.from(event.data)) as ChatData;
-            if ('Message' in data.data) {
-                this.dispatchEvent(new ChatChannelMessageEvent(data.data.Message, data.id));
-            } else if ('EditMessage' in data.data) {
-                this.dispatchEvent(new ChatChannelEditMessageEvent(data.data.EditMessage, data.id));
-            } else if ('Acknowledgement' in data.data) {
-                this.dispatchEvent(new ChatChannelAcknowledgeEvent(data.data.Acknowledgement.referencedID, data.id));
-            } else if ('RequestProfile' in data.data) {
-                this.dispatchEvent(new ChatChannelRequestProfileEvent(data.data.RequestProfile, data.id));
-            } else if ('Profile' in data.data) {
-                this.dispatchEvent(new ChatChannelProfileEvent(data.data.Profile, data.id));
+            try {
+                const data = AvroChatData.fromBuffer(Buffer.from(event.data)) as ChatData;
+                if ('Message' in data.data) {
+                    this.dispatchEvent(new ChatChannelMessageEvent(data.data.Message, data.id));
+                } else if ('EditMessage' in data.data) {
+                    this.dispatchEvent(new ChatChannelEditMessageEvent(data.data.EditMessage, data.id));
+                } else if ('Acknowledgement' in data.data) {
+                    this.dispatchEvent(
+                        new ChatChannelAcknowledgeEvent(data.data.Acknowledgement.referencedID, data.id));
+                } else if ('RequestProfile' in data.data) {
+                    this.dispatchEvent(new ChatChannelRequestProfileEvent(data.data.RequestProfile, data.id));
+                } else if ('Profile' in data.data) {
+                    this.dispatchEvent(new ChatChannelProfileEvent(data.data.Profile, data.id));
+                }
+            } catch (err) {
+                this.close();
             }
-        });
+
+        }, {signal});
     }
 
     private setState (newState: ChatChannelState): void {
@@ -152,8 +173,32 @@ ChatChannelProfileEvent
 
     public sendMessage (data: Message): void {
         const m: ChatData = {
-            id: crypto.randomUUID(),
+            id: generateID(),
             data: {Message: data}
+        };
+        const buf = AvroChatData.toBuffer(m).buffer;
+        void this.otrChannel.sendMessage(buf);
+    }
+
+    public requestProfile (): void {
+        const m: ChatData = {
+            id: generateID(),
+            data: {RequestProfile: {
+                previousHash: null
+            }}
+        };
+        const buf = AvroChatData.toBuffer(m).buffer;
+        void this.otrChannel.sendMessage(buf);
+    }
+
+    public async sendProfile (profile: Profile): Promise<void> {
+        const m: ChatData = {
+            id: generateID(),
+            data: {Profile: {
+                handle: profile.handle,
+                bio: profile.bio ? {string: profile.bio} : null,
+                avatar: profile.avatar ? {bytes: await profile.avatar.arrayBuffer()} : null
+            }}
         };
         const buf = AvroChatData.toBuffer(m).buffer;
         void this.otrChannel.sendMessage(buf);
