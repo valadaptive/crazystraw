@@ -7,6 +7,7 @@ import {encode, decode, DataType} from './otr-encoding';
 
 import {TypedEventTarget, TypedEvent} from '../util/typed-events';
 import toError from '../util/to-error';
+import PromiseQueue from '../util/promise-queue';
 
 const encryptWithCounterZero = (key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer> =>
     crypto.subtle.encrypt({name: 'AES-CTR', counter: new Uint8Array(16), length: 64}, key, data);
@@ -233,8 +234,9 @@ OTRChannelMessageEvent |
 OTRChannelMessageErrorEvent
 > {
     private rtcChannel: RTCChannel;
-    // TODO: use this when implementing close()
     private abortController: AbortController;
+    // we need to make sure not to process a message while still in the middle of processing a previous one
+    private messageQueue: PromiseQueue;
 
     private myIdentity: PersonalIdentity;
     private keyState: KeyState | null;
@@ -255,6 +257,7 @@ OTRChannelMessageErrorEvent
         // The "polite" peer is the one receiving the connection
         this.rtcChannel = new RTCChannel(gateway, peerIdentity, connectionID, !initiating);
         this.abortController = new AbortController();
+        this.messageQueue = new PromiseQueue();
 
         this.myIdentity = myIdentity;
         this.peerIdentity = peerIdentity;
@@ -312,25 +315,32 @@ OTRChannelMessageErrorEvent
             });
 
             this.setState(OTRChannelState.AUTHENTICATING);
-            if (initiating) {
-                await this.initiateKeyExchange();
-            } else {
-                await this.waitForKeyExchange();
-            }
-            this.setState(OTRChannelState.CONNECTED);
+            // Start accepting data messages immediately after the key exchange finishes.
+            // Prevents dropping messages in the short period after we've sent our last AKE message but still need to
+            // wait on stuff.
+            void this.messageQueue.enqueue(async () => {
+                if (initiating) {
+                    await this.initiateKeyExchange();
+                } else {
+                    await this.waitForKeyExchange();
+                }
+                this.setState(OTRChannelState.CONNECTED);
+            });
 
-            this.rtcChannel.addEventListener('message', async ({message}) => {
-                const dv = new DataView(message);
-                if (dv.getUint8(0) === MessageType.DATA) {
-                    try {
-                        await this.onMessage(message);
-                    } catch (err) {
-                        this.dispatchEvent(new OTRChannelMessageErrorEvent(err));
+            this.rtcChannel.addEventListener('message', ({message}) => {
+                void this.messageQueue.enqueue(async (): Promise<void> => {
+                    const dv = new DataView(message);
+                    if (dv.getUint8(0) === MessageType.DATA) {
+                        try {
+                            await this.onMessage(message);
+                        } catch (err) {
+                            this.dispatchEvent(new OTRChannelMessageErrorEvent(err));
+                        }
                     }
-                }
-                if (dv.getUint8(0) === MessageType.CLOSE) {
-                    this.closeChannels();
-                }
+                    if (dv.getUint8(0) === MessageType.CLOSE) {
+                        this.closeChannels();
+                    }
+                });
             }, {signal: this.abortController.signal});
         } catch (err) {
             this.close(toError(err));
@@ -651,6 +661,7 @@ OTRChannelMessageErrorEvent
             this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myCurrentPeerPrevious;
 
             this.keyState.myCurrentKey = nextKey;
+            this.keyState.myKeyid++;
             // Generate new session keys
             this.keyState.sessionKeys.myCurrentPeerCurrent =
                 await this.generateSessionKeys(nextKey, this.keyState.peerCurrentKey);
@@ -682,6 +693,7 @@ OTRChannelMessageErrorEvent
             this.keyState.sessionKeys.myPreviousPeerPrevious = this.keyState.sessionKeys.myPreviousPeerCurrent;
 
             this.keyState.peerCurrentKey = nextKey;
+            this.keyState.peerKeyid++;
             // Generate new session keys
             this.keyState.sessionKeys.myCurrentPeerCurrent =
                 await this.generateSessionKeys(this.keyState.myCurrentKey, nextKey);
@@ -694,7 +706,7 @@ OTRChannelMessageErrorEvent
         }
     }
 
-    public async sendMessage (data: ArrayBuffer): Promise<void> {
+    private async doSendMessage (data: ArrayBuffer): Promise<void> {
         if (!this.keyState) throw new Error('Not yet authenticated');
         const sessionKey = this.keyState.sessionKeys.myPreviousPeerCurrent;
 
@@ -796,6 +808,10 @@ OTRChannelMessageErrorEvent
         }
 
         this.dispatchEvent(new OTRChannelMessageEvent(decryptedMessage, oldMACKeys));
+    }
+
+    public async sendMessage (data: ArrayBuffer): Promise<void> {
+        return this.messageQueue.enqueue(() => this.doSendMessage(data));
     }
 
     private async generateSessionKeys (
