@@ -4,6 +4,7 @@ import {signal, Signal} from '@preact/signals';
 
 import {ChatChannel, ChatChannelState} from '../rtc/chat';
 import addContact from '../actions/add-contact';
+import addMessage from '../actions/add-message';
 
 export type SignalizedChatChannel = {
     state: Signal<ChatChannelState>,
@@ -40,6 +41,11 @@ const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel
     channel.addEventListener('connect', () => {
         channel.requestProfile();
     }, {signal: abortController.signal, once: true});
+
+    channel.addEventListener('message', event => {
+        const {message, id} = event;
+        addMessage(store, id, channel.peerIdentity, message, false);
+    }, {signal: abortController.signal});
 
     return {
         state: stateSignal,

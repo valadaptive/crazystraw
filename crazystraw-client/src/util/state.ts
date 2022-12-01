@@ -35,6 +35,23 @@ type ProfileData = {
     gatewayConnection: SignalizedGatewayConnection
 };
 
+export type ChatAttachment = {
+    id: string,
+    name: string,
+    width: null | number,
+    height: null | number,
+    data: Blob
+};
+
+export type ChatMessage = {
+    id: string,
+    timestamp: number,
+    from: string,
+    contents: string,
+    attachments: ChatAttachment[],
+    pending: Signal<boolean>
+};
+
 /**
  * Global application state
  */
@@ -44,7 +61,8 @@ export type AppState = {
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
     openChannels: Signal<Dictionary<SignalizedChatChannel>>,
     contacts: Signal<Dictionary<Signal<Contact>>>,
-    activeContact: Signal<string | null>
+    activeContact: Signal<string | null>,
+    chatMessages: Signal<Partial<Dictionary<ChatMessage[]>>>
 };
 
 export const createStore = (): AppState => {
@@ -61,7 +79,8 @@ export const createStore = (): AppState => {
         outgoingRequests: signal({}),
         openChannels: signal({}),
         contacts: signal({}),
-        activeContact: signal(null)
+        activeContact: signal(null),
+        chatMessages: signal({})
     };
 
     // Persist profile to storage

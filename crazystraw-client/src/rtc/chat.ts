@@ -48,49 +48,49 @@ class ChatChannelStateChangeEvent extends TypedEvent<'statechange'> {
 }
 
 class ChatChannelDataEvent<T extends string> extends TypedEvent<T> {
-    uuid: string;
+    id: string;
     constructor (type: T, uuid: string) {
         super(type);
-        this.uuid = uuid;
+        this.id = uuid;
     }
 }
 
 class ChatChannelMessageEvent extends ChatChannelDataEvent<'message'> {
     message: Message;
-    constructor (message: Message, uuid: string) {
-        super('message', uuid);
+    constructor (message: Message, id: string) {
+        super('message', id);
         this.message = message;
     }
 }
 
-class ChatChannelEditMessageEvent extends ChatChannelDataEvent<'message'> {
+class ChatChannelEditMessageEvent extends ChatChannelDataEvent<'editmessage'> {
     edit: EditMessage;
-    constructor (edit: EditMessage, uuid: string) {
-        super('message', uuid);
+    constructor (edit: EditMessage, id: string) {
+        super('editmessage', id);
         this.edit = edit;
     }
 }
 
 class ChatChannelAcknowledgeEvent extends ChatChannelDataEvent<'acknowledge'> {
     referencedID: string;
-    constructor (referencedID: string, uuid: string) {
-        super('acknowledge', uuid);
+    constructor (referencedID: string, id: string) {
+        super('acknowledge', id);
         this.referencedID = referencedID;
     }
 }
 
 class ChatChannelRequestProfileEvent extends ChatChannelDataEvent<'requestprofile'> {
     request: RequestProfile;
-    constructor (request: RequestProfile, uuid: string) {
-        super('requestprofile', uuid);
+    constructor (request: RequestProfile, id: string) {
+        super('requestprofile', id);
         this.request = request;
     }
 }
 
 class ChatChannelProfileEvent extends ChatChannelDataEvent<'profile'> {
     profile: ProfileMessage;
-    constructor (profile: ProfileMessage, uuid: string) {
-        super('profile', uuid);
+    constructor (profile: ProfileMessage, id: string) {
+        super('profile', id);
         this.profile = profile;
     }
 }
