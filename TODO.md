@@ -1,5 +1,5 @@
 - Contacts list storage, peer discovery prompt
-- Profile creation, editing, export, import
+- Profile editing
 - Chat box
 - Chat history and storage?
 - Self-hosted STUN/TURN (with authentication?)

@@ -36,12 +36,14 @@ const App = (): JSX.Element => {
     };
 
     const peerPrompt = useMemo(() => (
-        <div>
-            <label>Peer identity (base64):</label>
-            <input type="text" value={peerIdentityString} onInput={(event): void => {
-                setPeerIdentityString((event.target as HTMLInputElement).value);
-            }} />
-            <button onClick={connect}>Connect</button>
+        <div className={style.peerPrompt}>
+            <div>Add a new contact:</div>
+            <div className={style.peerPromptRow}>
+                <input className={style.peerInput} type="text" value={peerIdentityString} onInput={(event): void => {
+                    setPeerIdentityString((event.target as HTMLInputElement).value);
+                }} />
+                <button onClick={connect}>Connect</button>
+            </div>
         </div>
     ), [peerIdentityString, setPeerIdentityString, connect]);
 
@@ -49,10 +51,13 @@ const App = (): JSX.Element => {
         <div className={style.app}>
             <TopBar />
             <div className={style.main}>
-                {prompt}
+                {prompt ?? <>
+                    <div className={style.contactsAndPeerPrompt}>
+                        <ContactsList />
+                        {peerPrompt}
+                    </div>
+                </>}
             </div>
-            {/*peerPrompt*/}
-            <ContactsList />
         </div>
     );
 };

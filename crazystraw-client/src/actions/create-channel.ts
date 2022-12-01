@@ -4,6 +4,9 @@ import connectChatChannel from '../event-binding/chat-channel';
 
 import {ChatChannel} from '../rtc/chat';
 
+import closeIncomingPeerRequest from './close-incoming-peer-request';
+import closeOutgoingPeerRequest from './close-outgoing-peer-request';
+
 const createChannel = (store: AppState, channel: ChatChannel): void => {
     const oldChannels = store.openChannels.value;
 
@@ -14,6 +17,10 @@ const createChannel = (store: AppState, channel: ChatChannel): void => {
         // TODO: should close be in cleanup?
         prevChannel.cleanup();
     }
+
+    // Close any peer requests that may have existed for this channel
+    closeIncomingPeerRequest(store, channel.peerIdentity);
+    closeOutgoingPeerRequest(store, channel.peerIdentity);
 
     store.openChannels.value = {
         ...oldChannels,

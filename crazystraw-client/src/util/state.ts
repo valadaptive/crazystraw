@@ -43,7 +43,8 @@ export type AppState = {
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
     openChannels: Signal<Dictionary<SignalizedChatChannel>>,
-    contacts: Signal<Dictionary<Signal<Contact>>>
+    contacts: Signal<Dictionary<Signal<Contact>>>,
+    activeContact: Signal<string | null>
 };
 
 export const createStore = (): AppState => {
@@ -59,7 +60,8 @@ export const createStore = (): AppState => {
         incomingRequests: signal({}),
         outgoingRequests: signal({}),
         openChannels: signal({}),
-        contacts: signal({})
+        contacts: signal({}),
+        activeContact: signal(null)
     };
 
     // Persist profile to storage

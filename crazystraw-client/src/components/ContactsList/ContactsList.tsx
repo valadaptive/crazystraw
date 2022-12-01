@@ -3,13 +3,18 @@ import style from './style.scss';
 import type {JSX} from 'preact';
 import {useMemo} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
+import classNames from 'classnames';
 
-import {useAppState, Contact} from '../../util/state';
+import {useAppState, useAction, Contact} from '../../util/state';
 import fingerprintIcon from '../../util/digesticon';
 
 import Avatar from '../Avatar/Avatar';
 import Indicator, {IndicatorState} from '../Indicator/Indicator';
 import Icon from '../Icon/Icon';
+
+import closeOutgoingPeerRequestAction from '../../actions/close-outgoing-peer-request';
+import closeIncomingPeerRequestAction from '../../actions/close-incoming-peer-request';
+import setActiveContactAction from '../../actions/set-active-contact';
 
 import {
     IncomingPeerRequest,
@@ -27,6 +32,11 @@ const ContactItem = ({contact, connectionInfo}: {
     contact: Omit<Contact, 'lastMessageTimestamp'>,
     connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedChatChannel | null
 }): JSX.Element => {
+    const {activeContact} = useAppState();
+    const closeOutgoingPeerRequest = useAction(closeOutgoingPeerRequestAction);
+    const closeIncomingPeerRequest = useAction(closeIncomingPeerRequestAction);
+    const setActiveContact = useAction(setActiveContactAction);
+
     let avatar: Blob | string | null = null;
     if (contact.profile) {
         avatar = contact.profile.avatar;
@@ -37,6 +47,10 @@ const ContactItem = ({contact, connectionInfo}: {
             // The digest may be incorrect
         }
     }
+
+    const onClickContact = useMemo(() => () => {
+        setActiveContact(contact.identity);
+    }, [contact]);
 
     const connectionInfoLine = useMemo(() => {
         if (!connectionInfo) return null;
@@ -129,29 +143,45 @@ const ContactItem = ({contact, connectionInfo}: {
     }, [incomingRequest]);
     const cancelRequest = useMemo(() => () => outgoingRequest?.cancel(), [outgoingRequest]);
     const closeChannel = useMemo(() => () => channel?.close(), [channel]);
+    const closeRequest = useMemo(() => () => {
+        if (outgoingRequest) closeOutgoingPeerRequest(outgoingRequest.peerIdentity);
+        if (incomingRequest) closeIncomingPeerRequest(incomingRequest.peerIdentity);
+    }, [outgoingRequest, incomingRequest]);
 
     const includeIncomingRequestButtons = incomingRequest &&
         connectionInfo?.state.value === IncomingPeerRequestState.PENDING;
-    const includeOutgoingRequestButtons = outgoingRequest &&
+    const includeCancelButton = outgoingRequest &&
         connectionInfo?.state.value === OutgoingPeerRequestState.PENDING;
+    const includeCloseButton = (outgoingRequest &&
+        (connectionInfo?.state.value === OutgoingPeerRequestState.TIMED_OUT ||
+        connectionInfo?.state.value === OutgoingPeerRequestState.REJECTED ||
+        connectionInfo?.state.value === OutgoingPeerRequestState.PEER_OFFLINE ||
+        connectionInfo?.state.value === OutgoingPeerRequestState.CANCELLED ||
+        connectionInfo?.state.value === OutgoingPeerRequestState.CONNECTION_ERROR)) ||
+        (incomingRequest &&
+            (connectionInfo?.state.value === IncomingPeerRequestState.REJECTED ||
+            connectionInfo?.state.value === IncomingPeerRequestState.CANCELLED ||
+            connectionInfo?.state.value === IncomingPeerRequestState.CONNECTION_ERROR));
     const includeChannelButtons = channel &&
         connectionInfo?.state.value !== ChatChannelState.CLOSED;
 
     return (
-        <div className={style.contact}>
-            <div className={style.avatar}><Avatar data={avatar} size={64} /></div>
-            <div className={style.contactDetails}>
-                <div className={style.contactName}>{contact.profile?.handle ?? contact.identity}</div>
-                {connectionInfoLine ?
-                    <div className={style.contactIncomingOutgoing}>
-                        <div className={style.indicatorPadding}>
-                            <Indicator size={20} state={connectionInfoLine[1]} />
-                        </div>
-                        <span>{connectionInfoLine[0]}</span>
-                    </div> :
-                    null}
+        <div className={classNames(style.contact, {[style.active]: activeContact.value === contact.identity})}>
+            <div className={style.contactSelectable} onClick={onClickContact}>
+                <div className={style.avatar}><Avatar data={avatar} size={64} /></div>
+                <div className={style.contactDetails}>
+                    <div className={style.contactName}>{contact.profile?.handle ?? contact.identity}</div>
+                    {connectionInfoLine ?
+                        <div className={style.contactIncomingOutgoing}>
+                            <div className={style.indicatorPadding}>
+                                <Indicator size={20} state={connectionInfoLine[1]} />
+                            </div>
+                            <span>{connectionInfoLine[0]}</span>
+                        </div> :
+                        null}
+                </div>
             </div>
-            {includeIncomingRequestButtons || includeOutgoingRequestButtons || includeChannelButtons ?
+            {includeIncomingRequestButtons || includeCancelButton || includeChannelButtons || includeCloseButton ?
                 <div className={style.contactButtons}>
                     {includeIncomingRequestButtons ?
                         <>
@@ -159,8 +189,11 @@ const ContactItem = ({contact, connectionInfo}: {
                             <Icon type="x" onClick={rejectRequest} color="red" title="Reject" />
                         </> :
                         null}
-                    {includeOutgoingRequestButtons ?
+                    {includeCancelButton ?
                         <Icon type="cancel" onClick={cancelRequest} title="Cancel" /> :
+                        null}
+                    {includeCloseButton ?
+                        <Icon type="x" onClick={closeRequest} title="Close" /> :
                         null}
                     {includeChannelButtons ?
                         <Icon type="x" onClick={closeChannel} title="Close connection" /> :
