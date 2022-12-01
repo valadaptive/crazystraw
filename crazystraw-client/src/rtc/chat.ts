@@ -171,13 +171,15 @@ ChatChannelProfileEvent
         this.setState(ChatChannelState.CLOSED);
     }
 
-    public sendMessage (data: Message): void {
+    public sendMessage (data: Message): string {
+        const id = generateID();
         const m: ChatData = {
-            id: generateID(),
+            id,
             data: {Message: data}
         };
         const buf = AvroChatData.toBuffer(m).buffer;
         void this.otrChannel.sendMessage(buf);
+        return id;
     }
 
     public requestProfile (): void {

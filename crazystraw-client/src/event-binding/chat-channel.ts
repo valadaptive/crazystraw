@@ -5,6 +5,7 @@ import {signal, Signal} from '@preact/signals';
 import {ChatChannel, ChatChannelState} from '../rtc/chat';
 import addContact from '../actions/add-contact';
 import addMessage from '../actions/add-message';
+import setActiveContact from '../actions/set-active-contact';
 
 export type SignalizedChatChannel = {
     state: Signal<ChatChannelState>,
@@ -18,6 +19,12 @@ const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel
 
     channel.addEventListener('statechange', () => {
         stateSignal.value = channel.state;
+
+        // TODO does this even work?
+        if (channel.state === ChatChannelState.CLOSED) {
+            const {[channel.peerIdentity]: __removed, ...rest} = store.openChannels.value;
+            store.openChannels.value = rest;
+        }
     }, {signal: abortController.signal});
 
     channel.addEventListener('requestprofile', () => {
@@ -40,11 +47,12 @@ const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel
 
     channel.addEventListener('connect', () => {
         channel.requestProfile();
+        setActiveContact(store, channel.peerIdentity);
     }, {signal: abortController.signal, once: true});
 
     channel.addEventListener('message', event => {
         const {message, id} = event;
-        addMessage(store, id, channel.peerIdentity, message, false);
+        addMessage(store, id, channel.peerIdentity, channel.peerIdentity, message, false);
     }, {signal: abortController.signal});
 
     return {

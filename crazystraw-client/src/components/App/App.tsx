@@ -4,6 +4,7 @@ import type {JSX} from 'preact';
 import {useState, useMemo} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 
+import ChatView from '../ChatView/ChatView';
 import ContactsList from '../ContactsList/ContactsList';
 import TopBar from '../TopBar/TopBar';
 import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
@@ -49,15 +50,16 @@ const App = (): JSX.Element => {
 
     return (
         <div className={style.app}>
-            <TopBar />
-            <div className={style.main}>
-                {prompt ?? <>
+            {prompt ?? <>
+                <TopBar />
+                <div className={style.main}>
                     <div className={style.contactsAndPeerPrompt}>
                         <ContactsList />
                         {peerPrompt}
                     </div>
-                </>}
-            </div>
+                    <ChatView />
+                </div>
+            </>}
         </div>
     );
 };

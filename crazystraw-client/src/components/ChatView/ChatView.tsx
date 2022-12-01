@@ -1,17 +1,16 @@
 import style from './style.scss';
 import type {JSX} from 'preact';
-import {useMemo, useState} from 'preact/hooks';
+import {useMemo} from 'preact/hooks';
 
-import setProfileAction from '../../actions/set-profile';
-
+import ChatInputBox from '../ChatInputBox/ChatInputBox';
 import ChatMessage from '../ChatMessage/ChatMessage';
 
-import {useAppState, useAction, ProfileState} from '../../util/state';
+import {useAppState} from '../../util/state';
 
 const ChatView = (): JSX.Element => {
     const {chatMessages, activeContact} = useAppState();
 
-    const activeContactMessages = activeContact.value ? chatMessages.value[activeContact.value] : undefined;
+    const activeContactMessages = activeContact.value ? chatMessages.value[activeContact.value]?.value : undefined;
 
     const messages = useMemo(() => {
         if (!activeContactMessages) return null;
@@ -26,11 +25,17 @@ const ChatView = (): JSX.Element => {
             
             messages.push(<ChatMessage message={cur} firstInChain={shouldSplit} key={cur.id} />);
         }
+        return messages;
     }, [activeContactMessages]);
 
     return (
         <div className={style.chatView}>
-            {messages}
+            <div className={style.messages}>
+                {messages}
+            </div>
+            <div className={style.inputBox}>
+                <ChatInputBox />
+            </div>
         </div>
     );
 };

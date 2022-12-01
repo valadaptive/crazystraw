@@ -5,8 +5,20 @@ import {idToTimestamp} from '../util/id';
 
 import type {Message} from '../schemas/message';
 
-const addMessage = (store: AppState, id: string, from: string, message: Message, pending: boolean): void => {
-    const messages = store.chatMessages.value[from]?.slice(0) ?? [];
+const addMessage = (
+    store: AppState,
+    id: string,
+    from: string,
+    channel: string,
+    message: Message,
+    pending: boolean
+): void => {
+    let dstMessagesSignal = store.chatMessages.value[channel];
+    const messages = dstMessagesSignal?.value.slice(0) ?? [];
+    if (!dstMessagesSignal) {
+        dstMessagesSignal = signal([]);
+        store.chatMessages.value = {...store.chatMessages.value, [channel]: dstMessagesSignal};
+    }
 
     const timestamp = idToTimestamp(id);
     const addedMessage: ChatMessage = {
@@ -26,15 +38,14 @@ const addMessage = (store: AppState, id: string, from: string, message: Message,
         pending: signal(pending)
     };
 
-
-    for (let i = messages.length; i > 0; i--) {
-        if (idToTimestamp(messages[i].id) <= timestamp || i === 0) {
-            messages.splice(i, 0, addedMessage);
+    for (let i = Math.max(0, messages.length - 1); i >= 0; i--) {
+        if (i === 0 || idToTimestamp(messages[i].id) <= timestamp) {
+            messages.splice(i + 1, 0, addedMessage);
             break;
         }
     }
 
-    store.chatMessages.value[from] = messages;
+    dstMessagesSignal.value = messages;
 };
 
 export default addMessage;

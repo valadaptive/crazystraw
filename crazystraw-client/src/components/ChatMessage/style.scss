@@ -1,3 +1,30 @@
+@use "sass:math";
+
+$message-padding-left: 72px;
+$avatar-size: 48px;
+
 .message {
     padding-left: 72px;
+    position: relative;
+    margin: 0.25rem 0.25rem 0.25rem 0;
+}
+
+.message-header {
+    margin: 1.5rem 0 0.25rem 0;
+}
+
+.username {
+    font-weight: 600;
+}
+
+.avatar {
+    position: absolute;
+    top: 0;
+    left: #{math.div($message-padding-left - $avatar-size, 2)};
+}
+
+.contents {
+    margin-bottom: 0.125rem;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
 }

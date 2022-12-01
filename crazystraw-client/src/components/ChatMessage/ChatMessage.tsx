@@ -1,11 +1,10 @@
 import style from './style.scss';
 import type {JSX} from 'preact';
-import {useMemo, useState} from 'preact/hooks';
 import {Signal, useComputed} from '@preact/signals';
 
-import setProfileAction from '../../actions/set-profile';
+import Avatar from '../Avatar/Avatar';
 
-import {useAppState, useAction, ProfileState, ChatMessage as MessageData, Contact} from '../../util/state';
+import {useAppState, ProfileState, ChatMessage as MessageData, Contact} from '../../util/state';
 
 const ChatMessage = ({message, firstInChain}: {
     message: MessageData,
@@ -25,6 +24,7 @@ const ChatMessage = ({message, firstInChain}: {
         <div className={style.message}>
             {firstInChain ?
                 <div className={style.messageHeader}>
+                    <div className={style.avatar}><Avatar size={48} data={profile?.avatar ?? null} /></div>
                     <div className={style.username}>{profile?.handle ?? 'Unknown user'}</div>
                 </div> :
                 null}

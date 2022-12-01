@@ -1,0 +1,18 @@
+.chat-view {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+}
+
+.messages {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+.input-box {
+    flex: 0 1 auto;
+    overflow: auto;
+    display: flex;
+    padding: 0.5rem;
+}
