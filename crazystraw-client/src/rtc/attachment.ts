@@ -81,7 +81,7 @@ class ChatAttachment {
             attachment.type,
             attachment.width ? attachment.width.int : null,
             attachment.height ? attachment.height.int : null,
-            new Blob([attachment.data])
+            new Blob([attachment.data], {type: attachment.type})
         );
     }
 
@@ -96,7 +96,7 @@ class ChatAttachment {
         };
     }
 
-    public isViewableImage (): boolean {
+    public get isViewableImage (): boolean {
         return VIEWABLE_IMAGES.has(this.type);
     }
 

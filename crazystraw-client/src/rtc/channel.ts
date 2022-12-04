@@ -244,7 +244,7 @@ RTCChannelMessageEvent
         }, {signal});
     }
 
-    public send (data: ArrayBuffer): void {
+    public async send (data: ArrayBuffer): Promise<void> {
         if (!(data instanceof ArrayBuffer)) throw new Error('Data must be an ArrayBuffer instance');
         if (this.channel.readyState !== 'open') throw new Error('Channel is not open');
 
@@ -262,6 +262,30 @@ RTCChannelMessageEvent
         const messageArr = new Uint8Array(messageBuffer, RTCChannel.HEADER_SIZE);
 
         for (let i = 0; i < numChunks; i++) {
+            if (this.channel.bufferedAmount > this.channel.bufferedAmountLowThreshold) {
+                await new Promise<void>((resolve, reject) => {
+                    const onBufferedAmountLow = (): void => {
+                        resolve();
+                        this.channel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+                        this.channel.removeEventListener('close', onClose);
+                    };
+                    const onClose = (): void => {
+                        reject();
+                        this.channel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+                        this.channel.removeEventListener('close', onClose);
+                    };
+                    this.channel.addEventListener(
+                        'bufferedamountlow',
+                        onBufferedAmountLow,
+                        {signal: this.abortController.signal}
+                    );
+                    this.channel.addEventListener(
+                        'close',
+                        onClose,
+                        {signal: this.abortController.signal}
+                    );
+                });
+            }
             dv.setUint16(0, i, true);
             const remainder = data.byteLength - (i * chunkDataSize);
             messageArr.set(new Uint8Array(data, i * chunkDataSize, Math.min(chunkDataSize, remainder)));

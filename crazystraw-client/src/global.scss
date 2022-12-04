@@ -54,3 +54,13 @@ textarea {
     margin: 0;
     font-family: $font;
 }
+
+a {
+    text-decoration: none;
+    color: col.$brand;
+
+    &:hover {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+}

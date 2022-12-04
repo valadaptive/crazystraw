@@ -52,13 +52,13 @@
     overflow: auto;
 }
 
-.filesize, .filename {
+.file-size, .file-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.filesize {
+.file-size {
     color: col.$text-detail;
 }
 

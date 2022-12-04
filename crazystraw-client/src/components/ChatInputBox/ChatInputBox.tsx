@@ -27,8 +27,8 @@ const AttachmentPreview = ({attachment, attachments}: {
     return (
         <div className={style.attachment}>
             <div className={style.fileInfo}>
-                <div className={style.filename}>{attachment.name}</div>
-                <div className={style.filesize}>{formatFileSize(attachment.size)}</div>
+                <div className={style.fileName}>{attachment.name}</div>
+                <div className={style.fileSize}>{formatFileSize(attachment.size)}</div>
             </div>
             <div className={style.removeAttachment}>
                 <Icon type="x" title="Remove" onClick={onRemove} />
@@ -76,6 +76,7 @@ const ChatInputBox = (): JSX.Element => {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             if (!contact || !currentContents || profile.state !== ProfileState.LOADED) return;
+            if (currentContents.text.value === '' && currentContents.attachments.value.length === 0) return;
 
             void (async (): Promise<void> => {
                 const channel = openChannels.value[contact].channel;
@@ -115,7 +116,7 @@ const ChatInputBox = (): JSX.Element => {
         {attachments}
         <div className={style.boxAndButtons}>
             <div className={style.buttons}>
-                <Icon type="upload" title="Upload attachment(s)" onClick={onAddAttachment} />
+                <Icon type="upload" title="Upload attachment(s)" onClick={onAddAttachment} disabled={!channel} />
             </div>
             {box}
         </div>

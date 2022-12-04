@@ -3,4 +3,4 @@
 - Chat history and storage?
 - Self-hosted STUN/TURN (with authentication?)
 - Attachment progress bar
-- Display attachments
+- Message send progress bar/display pending messages?

@@ -1,0 +1,44 @@
+@use '../../colors.scss' as col;
+
+.file-icon {
+    width: 48px;
+    height: 48px;
+    background-color: col.$icon-detail;
+    display: inline-block;
+}
+
+.audio {
+    mask-image: url('../../assets/icons/file/audio.svg');
+}
+
+.font {
+    mask-image: url('../../assets/icons/file/font.svg');
+}
+
+.image {
+    mask-image: url('../../assets/icons/file/image.svg');
+}
+
+.json {
+    mask-image: url('../../assets/icons/file/json.svg');
+}
+
+.misc {
+    mask-image: url('../../assets/icons/file/misc.svg');
+}
+
+.model {
+    mask-image: url('../../assets/icons/file/model.svg');
+}
+
+.text {
+    mask-image: url('../../assets/icons/file/text.svg');
+}
+
+.video {
+    mask-image: url('../../assets/icons/file/video.svg');
+}
+
+.xml {
+    mask-image: url('../../assets/icons/file/xml.svg');
+}

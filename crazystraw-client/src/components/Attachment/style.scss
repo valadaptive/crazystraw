@@ -1,0 +1,37 @@
+@use '../../colors.scss' as col;
+
+.attachment {
+    display: flex;
+}
+
+.attachment-image {
+    display: flex;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.attachment-file {
+    background-color: col.$base-color-tertiary;
+    border-radius: 4px;
+    padding: 0.5rem;
+    padding-right: 0.75rem;
+    gap: 0.5rem;
+    display: flex;
+    max-width: 16rem;
+    overflow: auto;
+    align-items: center;
+}
+
+.file-info {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-name {
+    font-weight: 600;
+}
+
+.file-size {
+    color: col.$text-detail;
+    font-size: 90%;
+}

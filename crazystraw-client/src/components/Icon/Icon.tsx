@@ -20,7 +20,15 @@ const Icon = ({type, title, size, onClick, disabled, color}: {
     } : undefined;
     return (
         <div
-            className={classNames(style.icon, style[type], {[style.button]: onClick}, color ? style[color] : null)}
+            className={classNames(
+                style.icon,
+                style[type],
+                color ? style[color] : null,
+                {
+                    [style.button]: onClick,
+                    [style.disabled]: disabled
+                }
+            )}
             style={inlineStyle}
             onClick={disabled ? undefined : onClick}
             title={title}

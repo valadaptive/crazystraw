@@ -2,6 +2,7 @@ import style from './style.scss';
 import type {JSX} from 'preact';
 import {Signal, useComputed} from '@preact/signals';
 
+import Attachment from '../Attachment/Attachment';
 import Avatar from '../Avatar/Avatar';
 
 import {useAppState, ProfileState, ChatMessage as MessageData, Contact} from '../../util/state';
@@ -29,6 +30,11 @@ const ChatMessage = ({message, firstInChain}: {
                 </div> :
                 null}
             <div className={style.contents}>{message.contents}</div>
+            {message.attachments.length ?
+                <div className={style.attachments}>
+                    {message.attachments.map(attachment => <Attachment attachment={attachment} key={attachment.id} />)}
+                </div> :
+                null}
         </div>
     );
 };
