@@ -5,7 +5,7 @@ import type {JSX} from 'preact';
 
 import {useMemo, useState} from 'preact/hooks';
 
-import createProfileAction from '../../actions/create-profile';
+import createIdentityAction from '../../actions/create-identity';
 import importSavedProfileAction from '../../actions/import-saved-profile';
 
 import Avatar from '../Avatar/Avatar';
@@ -15,7 +15,7 @@ import resizeAvatar from '../../util/resize-avatar';
 import createFileUploadDialog from '../../util/create-file-upload-dialog';
 
 const SetupPrompt = (): JSX.Element => {
-    const createProfile = useAction(createProfileAction);
+    const createIdentity = useAction(createIdentityAction);
     const importSavedProfile = useAction(importSavedProfileAction);
 
     const [handle, setHandle] = useState('');
@@ -56,8 +56,8 @@ const SetupPrompt = (): JSX.Element => {
         }
     }, [importSavedProfile]);
 
-    const createIdentity = useMemo(() => () => {
-        createProfile({
+    const handleCreateIdentity = useMemo(() => () => {
+        createIdentity({
             handle,
             avatar,
             bio
@@ -89,7 +89,7 @@ const SetupPrompt = (): JSX.Element => {
 
             <button
                 disabled={handle.length === 0 || password.length === 0}
-                onClick={createIdentity}
+                onClick={handleCreateIdentity}
                 className={buttons.green}
             >Create</button>
 

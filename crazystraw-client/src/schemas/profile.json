@@ -2,6 +2,7 @@
     "name": "Profile",
     "type": "record",
     "fields": [
+        {"name": "id", "type": "uid"},
         {"name": "handle", "type": "string"},
         {"name": "bio", "type": ["null", "string"]},
         {"name": "avatar", "type": ["null", "bytes"]}

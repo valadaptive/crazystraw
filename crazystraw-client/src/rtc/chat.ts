@@ -6,7 +6,7 @@ import {generateID} from '../util/id';
 import {GatewayConnection} from './gateway';
 import {PersonalIdentity} from './identity';
 import {OTRChannel, OTRChannelState} from './otr';
-import {Profile} from './profile';
+import Profile from './profile';
 
 import {ChatData, AvroChatData} from '../schemas/chat-data';
 import {Message} from '../schemas/message';
@@ -182,11 +182,11 @@ ChatChannelProfileEvent
         return id;
     }
 
-    public requestProfile (): void {
+    public requestProfile (previousID: string | null): void {
         const m: ChatData = {
             id: generateID(),
             data: {RequestProfile: {
-                previousHash: null
+                previousID: typeof previousID === 'string' ? {uid: previousID} : null
             }}
         };
         const buf = AvroChatData.toBuffer(m).buffer;
@@ -197,6 +197,7 @@ ChatChannelProfileEvent
         const m: ChatData = {
             id: generateID(),
             data: {Profile: {
+                id: profile.id,
                 handle: profile.handle,
                 bio: profile.bio ? {string: profile.bio} : null,
                 avatar: profile.avatar ? {bytes: Buffer.from(await profile.avatar.arrayBuffer())} : null

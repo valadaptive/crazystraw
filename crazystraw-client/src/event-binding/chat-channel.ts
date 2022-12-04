@@ -3,6 +3,8 @@ import {AppState, ProfileState} from '../util/state';
 import {signal, Signal} from '@preact/signals';
 
 import {ChatChannel, ChatChannelState} from '../rtc/chat';
+import Profile from '../rtc/profile';
+
 import addContact from '../actions/add-contact';
 import addMessage from '../actions/add-message';
 import setActiveContact from '../actions/set-active-contact';
@@ -27,26 +29,30 @@ const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel
         }
     }, {signal: abortController.signal});
 
-    channel.addEventListener('requestprofile', () => {
+    channel.addEventListener('requestprofile', event => {
         if (store.profileData.value.state !== ProfileState.LOADED) return;
-        void channel.sendProfile(store.profileData.value.profile);
+        const previousID = event.request.previousID?.uid;
+        if (previousID === store.profileData.value.profile.value.id) return;
+        void channel.sendProfile(store.profileData.value.profile.value);
     }, {signal: abortController.signal});
 
     channel.addEventListener('profile', event => {
         const {profile} = event;
         addContact(store, channel.peerIdentity, {
             identity: channel.peerIdentity,
-            profile: {
-                handle: profile.handle,
-                avatar: profile.avatar ? new Blob([profile.avatar.bytes]) : null,
-                bio: profile.bio ? profile.bio.string : null
-            },
+            profile: new Profile(
+                profile.id,
+                profile.handle,
+                profile.avatar ? new Blob([profile.avatar.bytes]) : null,
+                profile.bio ? profile.bio.string : null
+            ),
             lastMessageTimestamp: Date.now()
         });
     }, {signal: abortController.signal});
 
     channel.addEventListener('connect', () => {
-        channel.requestProfile();
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        channel.requestProfile(store.contacts.value[channel.peerIdentity]?.value.profile?.id ?? null);
         setActiveContact(store, channel.peerIdentity);
     }, {signal: abortController.signal, once: true});
 

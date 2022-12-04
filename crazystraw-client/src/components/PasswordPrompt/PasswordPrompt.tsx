@@ -3,17 +3,18 @@ import prompt from '../../css/prompt.scss';
 
 import type {JSX} from 'preact';
 import {useMemo, useState} from 'preact/hooks';
+import {toByteArray} from 'base64-js';
 
-import setProfileAction from '../../actions/set-profile';
+import loadIdentityAction from '../../actions/load-identity';
+import deleteIdentityAction from '../../actions/delete-identity';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 import saveToFile from '../../util/save-to-file';
 
-import {PersonalProfile} from '../../rtc/profile';
-
 const PasswordPrompt = (): JSX.Element | null => {
     const {profileData} = useAppState();
-    const setProfile = useAction(setProfileAction);
+    const loadIdentity = useAction(loadIdentityAction);
+    const deleteIdentity = useAction(deleteIdentityAction);
 
     const [password, setPassword] = useState('');
     const [errored, setErrored] = useState(false);
@@ -24,15 +25,15 @@ const PasswordPrompt = (): JSX.Element | null => {
     const decryptProfileIdentity = useMemo(() => async () => {
         if (!savedProfile) return null;
         try {
-            const profile = await PersonalProfile.import(savedProfile, password);
-            setProfile(profile);
+            await loadIdentity(toByteArray(savedProfile), password);
         } catch (err) {
+            profileData.value = {state: ProfileState.SAVED_BUT_NOT_LOADED, savedProfile};
             setErrored(true);
         }
     }, [savedProfile, password]);
 
     const saveProfile = useMemo(() => () => {
-        if (savedProfile) saveToFile('profile.json', savedProfile);
+        if (savedProfile) saveToFile('profile', toByteArray(savedProfile), 'application/octet-stream');
     }, [savedProfile]);
 
     const onPasswordInput = useMemo(() => (event: Event): void => {
@@ -65,7 +66,7 @@ const PasswordPrompt = (): JSX.Element | null => {
 
             <div className={prompt.row}>
                 <button onClick={saveProfile}>Save profile</button>
-                <button onClick={(): void => setProfile(null)} className={buttons.red}>Delete profile</button>
+                <button onClick={deleteIdentity} className={buttons.red}>Delete profile</button>
             </div>
         </div>
     );

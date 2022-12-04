@@ -2,9 +2,6 @@
     "name": "RequestProfile",
     "type": "record",
     "fields": [
-        {"name": "previousHash", "type": [
-            "null",
-            {"name": "Sha256", "type": "fixed", "size": 32}
-        ]}
+        {"name": "previousID", "type": ["null", "uid"]}
     ]
 }

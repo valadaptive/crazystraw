@@ -1,74 +1,55 @@
-import {toByteArray, fromByteArray} from 'base64-js';
+import {Buffer} from 'buffer';
 
-import {PersonalIdentity} from './identity';
+import {AvroProfile, Profile as ProfileStructure} from '../schemas/profile';
 
 class Profile {
+    /**
+     * Unique profile ID. Not used to identify a specific user; rather, it's used to tell when a profile has changed.
+     * Different/updated profiles from the same user will have different IDs.
+     */
+    public id: string;
+    /** Username. */
     public handle: string;
+    /** Avatar image data. */
     public avatar: Blob | null;
+    /** User profile biography / "about me". */
     public bio: string | null;
 
     constructor (
+        id: string,
         handle: string,
         avatar: Blob | null,
         bio: string | null
     ) {
+        this.id = id;
         this.handle = handle;
         this.avatar = avatar;
         this.bio = bio;
     }
-}
 
-class PersonalProfile extends Profile {
-    public identity: PersonalIdentity;
-    public savedIdentity: Partial<Record<string, unknown>>;
-
-    private constructor (
-        identity: PersonalIdentity,
-        savedIdentity: Partial<Record<string, unknown>>,
-        handle: string,
-        avatar: Blob | null,
-        bio: string | null
-    ) {
-        super(handle, avatar, bio);
-        this.identity = identity;
-        this.savedIdentity = savedIdentity;
-    }
-
-    public async export (): Promise<string> {
-        const avatar = this.avatar ? fromByteArray(new Uint8Array(await this.avatar.arrayBuffer())) : null;
-        return JSON.stringify({
-            identity: this.savedIdentity,
+    public async toBytes (): Promise<Uint8Array> {
+        const avatar = this.avatar ? {bytes: Buffer.from(await this.avatar.arrayBuffer())} : null;
+        const profileStruct: ProfileStructure = {
+            id: this.id,
             handle: this.handle,
             avatar,
-            bio: this.bio
-        });
+            bio: this.bio ? {string: this.bio} : null
+        };
+
+        const serializedProfile = AvroProfile.toBuffer(profileStruct);
+        return serializedProfile;
     }
 
-    public static async import (json: string, password: string): Promise<PersonalProfile> {
-        const parsedJson = JSON.parse(json) as Partial<Record<string, unknown>>;
-        const {handle, bio, avatar: avatarStr, identity: identityJson} = parsedJson;
-        if (
-            typeof handle !== 'string' ||
-            (typeof bio !== 'string' && bio !== null) ||
-            (typeof avatarStr !== 'string' && avatarStr !== null) ||
-            (typeof identityJson !== 'object' || identityJson === null)
-        ) {
-            throw new Error('Invalid JSON');
-        }
+    public static fromBytes (data: Uint8Array): Profile {
+        const parsedProfile = AvroProfile.fromBuffer(Buffer.from(data)) as ProfileStructure;
 
-        const identity = await PersonalIdentity.import(identityJson, password);
-        const avatar = avatarStr ? new Blob([toByteArray(avatarStr)]) : null;
-
-        return new PersonalProfile(identity, identityJson, handle, avatar, bio);
-    }
-
-    public static async create (profile: Profile, password: string): Promise<PersonalProfile> {
-        const identity = await PersonalIdentity.generate();
-        const savedIdentity = await identity.export(password);
-        const {handle, avatar, bio} = profile;
-        return new PersonalProfile(identity, savedIdentity, handle, avatar, bio);
-
+        return new Profile(
+            parsedProfile.id,
+            parsedProfile.handle,
+            parsedProfile.avatar ? new Blob([parsedProfile.avatar.bytes]) : null,
+            parsedProfile.bio?.string ?? null
+        );
     }
 }
 
-export {Profile, PersonalProfile};
+export default Profile;

@@ -1,35 +1,17 @@
-import {GatewayConnection} from '../rtc/gateway';
-import {PersonalProfile} from '../rtc/profile';
+import Profile from '../rtc/profile';
 
 import {AppState, ProfileState} from '../util/state';
 
-import connectGatewayConnection from '../event-binding/gateway-connection';
-
-const CONNECTION_SERVER = 'ws://localhost:9876';
-
-const setProfile = (store: AppState, profile: PersonalProfile | null): void => {
-    const previousProfileData = store.profileData.peek();
-
-    // Clean up previous gateway connection
-    if (previousProfileData.state === ProfileState.LOADED) {
-        previousProfileData.gatewayConnection.cleanup();
+const setProfile = (store: AppState, profile: Profile): void => {
+    if (store.profileData.value.state !== ProfileState.LOADED) {
+        throw new Error('Profile data not loaded');
     }
 
-    if (profile === null) {
-        store.profileData.value = {state: ProfileState.NONEXISTENT};
-        return;
-    }
+    store.profileData.value.profile.value = profile;
 
-    store.profileData.value = {
-        state: ProfileState.LOADED,
-        profile,
-        gatewayConnection: connectGatewayConnection(store, new GatewayConnection(CONNECTION_SERVER, profile.identity))
-    };
-
-    // TODO: stop conflating profiles with public keys/identities
-    /*for (const {channel} of Object.values(store.openChannels.value)) {
+    for (const {channel} of Object.values(store.openChannels.value)) {
         void channel.sendProfile(profile);
-    }*/
+    }
 };
 
 export default setProfile;

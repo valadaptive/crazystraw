@@ -1,4 +1,7 @@
-import {toByteArray, fromByteArray} from 'base64-js';
+import {fromByteArray} from 'base64-js';
+import {Buffer} from 'buffer';
+
+import {PersonalIdentity as PersonalIdentityStructure, AvroPersonalIdentity} from '../schemas/personal-identity';
 
 const ECDSA_PARAMS = {name: 'ECDSA', namedCurve: 'P-256'};
 
@@ -54,16 +57,25 @@ export class Identity {
 }
 
 export class PersonalIdentity extends Identity {
+    /** ECDSA private key, for signing messages and verifying identity. */
     public privateKey: CryptoKey;
+    /** Secret AES key, for encrypting and decrypting profile-associated data. */
+    private importExportKey: CryptoKey;
+    /** Random parameters used to derive import/export key. */
+    private aesParams: {salt: Uint8Array, iv: Uint8Array};
 
     private constructor (
         publicKey: CryptoKey,
         privateKey: CryptoKey,
+        importExportKey: CryptoKey,
+        aesParams: PersonalIdentity['aesParams'],
         rawPublicKey: Uint8Array,
         publicKeyFingerprint: Uint8Array
     ) {
         super(publicKey, rawPublicKey, publicKeyFingerprint);
         this.privateKey = privateKey;
+        this.importExportKey = importExportKey;
+        this.aesParams = aesParams;
     }
 
     private static async deriveKeyFromPassword (password: string, salt: ArrayBuffer): Promise<CryptoKey> {
@@ -96,85 +108,80 @@ export class PersonalIdentity extends Identity {
         return crypto.subtle.sign({name: 'ECDSA', hash: 'SHA-256'}, this.privateKey, data);
     }
 
-    async export (password: string): Promise<{
-        privateKey: string,
-        publicKey: string,
-        salt: string,
-        iv: string
-    }> {
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-        const wrappingKey = await PersonalIdentity.deriveKeyFromPassword(password, salt);
-
-        const iv = crypto.getRandomValues(new Uint8Array(12));
+    async export (associatedData: Uint8Array | null): Promise<Uint8Array> {
+        const {salt, iv} = this.aesParams;
         const wrappedPrivateKey = await crypto.subtle.wrapKey(
             'pkcs8',
             this.privateKey,
-            wrappingKey,
+            this.importExportKey,
             {name: 'AES-GCM', iv}
         );
 
-        const exportedPublicKey = await crypto.subtle.exportKey('raw', this.publicKey);
-
-        return {
-            privateKey: fromByteArray(new Uint8Array(wrappedPrivateKey)),
-            publicKey: fromByteArray(new Uint8Array(exportedPublicKey)),
-            salt: fromByteArray(salt),
-            iv: fromByteArray(iv)
+        const dataStruct: PersonalIdentityStructure = {
+            privateKey: Buffer.from(wrappedPrivateKey),
+            publicKey: Buffer.from(this.rawPublicKey),
+            salt: Buffer.from(salt),
+            iv: Buffer.from(iv),
+            data: associatedData ? {bytes: Buffer.from(associatedData)} : null
         };
+
+        const exportedData = AvroPersonalIdentity.toBuffer(dataStruct);
+
+        return new Uint8Array(exportedData);
     }
 
-    static async import (json: Partial<Record<string, unknown>>, password: string): Promise<PersonalIdentity> {
-        const {privateKey: privateKeyStr, publicKey: publicKeyStr, salt: saltStr, iv: ivStr} = json;
-        if (
-            typeof privateKeyStr !== 'string' ||
-            typeof publicKeyStr !== 'string' ||
-            typeof saltStr !== 'string' ||
-            typeof ivStr !== 'string'
-        ) {
-            throw new Error('Invalid JSON');
-        }
+    static async import (data: Uint8Array, password: string): Promise<{
+        identity: PersonalIdentity,
+        data: Uint8Array | null
+    }> {
+        const dataStruct = AvroPersonalIdentity.fromBuffer(Buffer.from(data)) as PersonalIdentityStructure;
 
-        const encryptedPrivateKey = toByteArray(privateKeyStr);
-        const importedPublicKey = toByteArray(publicKeyStr);
-        const salt = toByteArray(saltStr);
-        const iv = toByteArray(ivStr);
-
-        const unwrappingKey = await PersonalIdentity.deriveKeyFromPassword(password, salt);
+        const decryptedPrivateKey = await PersonalIdentity.deriveKeyFromPassword(password, dataStruct.salt);
 
         const privateKey = await crypto.subtle.unwrapKey(
             'pkcs8',
-            encryptedPrivateKey,
-            unwrappingKey,
-            {name: 'AES-GCM', iv},
+            dataStruct.privateKey,
+            decryptedPrivateKey,
+            {name: 'AES-GCM', iv: dataStruct.iv},
             ECDSA_PARAMS,
             true,
             ['sign']);
 
         const publicKey = await crypto.subtle.importKey(
             'raw',
-            importedPublicKey,
+            dataStruct.publicKey,
             ECDSA_PARAMS,
             true,
             ['verify']
         );
 
-        const fingerprint = await crypto.subtle.digest('SHA-256', importedPublicKey);
+        const fingerprint = await crypto.subtle.digest('SHA-256', dataStruct.publicKey);
 
-        return new PersonalIdentity(
-            publicKey,
-            privateKey,
-            importedPublicKey,
-            new Uint8Array(fingerprint.slice(0, 16))
-        );
+        return {
+            identity: new PersonalIdentity(
+                publicKey,
+                privateKey,
+                decryptedPrivateKey,
+                {salt: dataStruct.salt, iv: dataStruct.iv},
+                dataStruct.publicKey,
+                new Uint8Array(fingerprint.slice(0, 16))
+            ),
+            data: dataStruct.data?.bytes ?? null
+        };
     }
 
-    static async generate (): Promise<PersonalIdentity> {
+    static async generate (password: string): Promise<PersonalIdentity> {
         const keyPair = await crypto.subtle.generateKey(ECDSA_PARAMS, true, ['sign', 'verify']);
         const rawPublicKey = await crypto.subtle.exportKey('raw', keyPair.publicKey);
         const fingerprint = await crypto.subtle.digest('SHA-256', rawPublicKey);
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const importExportKey = await PersonalIdentity.deriveKeyFromPassword(password, salt);
         return new PersonalIdentity(
             keyPair.publicKey,
             keyPair.privateKey,
+            importExportKey,
+            {salt, iv},
             new Uint8Array(rawPublicKey),
             new Uint8Array(fingerprint.slice(0, 16))
         );

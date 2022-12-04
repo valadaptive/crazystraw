@@ -1,9 +1,11 @@
 import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
 import {signal, effect, Signal} from '@preact/signals';
+import {fromByteArray} from 'base64-js';
 
 import ChatAttachment from '../rtc/attachment';
-import {Profile, PersonalProfile} from '../rtc/profile';
+import Profile from '../rtc/profile';
+import {PersonalIdentity} from '../rtc/identity';
 
 import {SignalizedIncomingPeerRequest} from '../event-binding/incoming-peer-request';
 import {SignalizedOutgoingPeerRequest} from '../event-binding/outgoing-peer-request';
@@ -14,6 +16,7 @@ export const enum ProfileState {
     SAVED_BUT_NOT_LOADED,
     NONEXISTENT,
     GENERATING,
+    LOADING,
     LOADED
 }
 
@@ -27,12 +30,13 @@ export type Contact = {
 // Thanks TypeScript!
 type Dictionary<T> = {[x: string]: T};
 
-type ProfileData = {
+type IdentityData = {
     state: ProfileState.SAVED_BUT_NOT_LOADED,
     savedProfile: string
-} | {state: ProfileState.NONEXISTENT | ProfileState.GENERATING} | {
+} | {state: ProfileState.NONEXISTENT | ProfileState.GENERATING | ProfileState.LOADING} | {
     state: ProfileState.LOADED,
-    profile: PersonalProfile,
+    identity: PersonalIdentity,
+    profile: Signal<Profile>,
     gatewayConnection: SignalizedGatewayConnection
 };
 
@@ -54,7 +58,7 @@ export type OutgoingMessageContents = {
  * Global application state
  */
 export type AppState = {
-    profileData: Signal<ProfileData>,
+    profileData: Signal<IdentityData>,
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
     openChannels: Signal<Dictionary<SignalizedChatChannel>>,
@@ -84,6 +88,7 @@ export const createStore = (): AppState => {
     };
 
     // Persist profile to storage
+    let profileGeneration = 0;
     effect(() => {
         const profile = store.profileData.value;
 
@@ -95,8 +100,12 @@ export const createStore = (): AppState => {
         if (profile.state !== ProfileState.LOADED) return;
 
         void (async (): Promise<void> => {
-            const savedProfile = await profile.profile.export();
-            localStorage.setItem('profile', savedProfile);
+            const savedGen = ++profileGeneration;
+            const profileBytes = await profile.profile.value.toBytes();
+            const savedIdentity = await profile.identity.export(profileBytes);
+            // Don't save outdated profiles
+            if (savedGen !== profileGeneration) return;
+            localStorage.setItem('profile', fromByteArray(savedIdentity));
         })();
     });
 
@@ -114,8 +123,8 @@ export const useAppState = (): AppState => {
     return context;
 };
 
-export const useAction = <T extends unknown[]>(
-    func: (store: AppState, ...args: T) => void | Promise<void>): ((...args: T) => void) => {
+export const useAction = <T extends unknown[], V>(
+    func: (store: AppState, ...args: T) => V): ((...args: T) => V) => {
     const context = useAppState();
     return useMemo(() => func.bind(null, context), [context]);
 };

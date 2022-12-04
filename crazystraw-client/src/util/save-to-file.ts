@@ -3,9 +3,9 @@
  * @param name The intended filename.
  * @param contents The file contents.
  */
-const saveToFile = (name: string, contents: BlobPart): void => {
+const saveToFile = (name: string, contents: BlobPart, type?: string): void => {
     const a = document.createElement('a');
-    const url = URL.createObjectURL(new Blob([contents]));
+    const url = URL.createObjectURL(new Blob([contents], {type}));
 
     a.href = url;
     a.download = name;

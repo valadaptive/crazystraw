@@ -4,3 +4,4 @@
 - Self-hosted STUN/TURN (with authentication?)
 - Attachment progress bar
 - Message send progress bar/display pending messages?
+- Message editing

@@ -19,11 +19,12 @@ const App = (): JSX.Element => {
     const createPeerRequest = useAction(createOutgoingPeerRequestAction);
 
     const prompt = useComputed(() => {
-        if (profileData.value.state === ProfileState.NONEXISTENT) {
+        const profileState = profileData.value.state;
+        if (profileState === ProfileState.NONEXISTENT) {
             return (
                 <SetupPrompt />
             );
-        } else if (profileData.value.state === ProfileState.SAVED_BUT_NOT_LOADED) {
+        } else if (profileState === ProfileState.SAVED_BUT_NOT_LOADED || profileState === ProfileState.LOADING) {
             return (
                 <PasswordPrompt />
             );

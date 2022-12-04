@@ -17,8 +17,8 @@ const ChatMessage = ({message, firstInChain}: {
         const contact = (contacts.value[message.from] as Signal<Contact> | undefined);
         if (contact) return contact.value.profile;
         if (profileData.value.state !== ProfileState.LOADED) return null;
-        const myIdentity = profileData.value.profile.identity.toBase64();
-        return myIdentity === message.from ? profileData.value.profile : null;
+        const myIdentity = profileData.value.identity.toBase64();
+        return myIdentity === message.from ? profileData.value.profile.value : null;
     }).value;
 
     return (

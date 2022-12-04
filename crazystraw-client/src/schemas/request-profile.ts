@@ -1,33 +1,18 @@
 import {Type} from 'avsc';
 
-export type Sha256 = ArrayBuffer;
+import {uid, AvroUid} from './uid';
 
 export type RequestProfile = {
-    previousHash: null | {Sha256: Sha256};
+    previousID: null | {uid: uid};
 };
-
-export const AvroSha256 = Type.forSchema(
-    {name: 'Sha256', type: 'fixed', size: 32},
-    {wrapUnions: true}
-);
 
 export const AvroRequestProfile = Type.forSchema(
     {
         name: 'RequestProfile',
         type: 'record',
         fields: [
-            {
-                name: 'previousHash',
-                type: [
-                    'null',
-                    {
-                        name: 'Sha256',
-                        type: 'fixed',
-                        size: 32
-                    }
-                ]
-            }
+            {name: 'previousID', type: ['null', 'uid']}
         ]
     },
-    {wrapUnions: true}
+    {wrapUnions: true, registry: {uid: AvroUid}}
 );

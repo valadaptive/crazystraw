@@ -87,7 +87,7 @@ const ChatInputBox = (): JSX.Element => {
                         attachment => attachment.toAvro()))
                 };
                 const id = channel.sendMessage(message);
-                addMessage(id, profile.profile.identity.toBase64(), contact, message, false);
+                addMessage(id, profile.identity.toBase64(), contact, message, false);
                 clearOutgoingMessage(contact);
             })();
         }
