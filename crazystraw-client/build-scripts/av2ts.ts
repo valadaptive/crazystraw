@@ -136,7 +136,7 @@ const primitiveToTypescript = (type: string): string | null => {
         case 'float':
             return 'number';
         case 'bytes':
-            return 'ArrayBuffer';
+            return 'Buffer';
         case 'null':
         case 'boolean':
         case 'string':

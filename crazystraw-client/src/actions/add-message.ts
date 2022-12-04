@@ -1,6 +1,8 @@
 import {signal} from '@preact/signals';
 
-import type {AppState, ChatMessage, ChatAttachment} from '../util/state';
+import ChatAttachment from '../rtc/attachment';
+
+import type {AppState, ChatMessage} from '../util/state';
 import {idToTimestamp} from '../util/id';
 
 import type {Message} from '../schemas/message';
@@ -26,15 +28,7 @@ const addMessage = (
         timestamp,
         from,
         contents: message.contents,
-        attachments: message.attachments.map((attachment): ChatAttachment => {
-            return {
-                id: attachment.id,
-                name: attachment.name,
-                width: attachment.width ? attachment.width.int : null,
-                height: attachment.height ? attachment.height.int : null,
-                data: new Blob([attachment.data])
-            };
-        }),
+        attachments: message.attachments.map((attachment): ChatAttachment => ChatAttachment.fromAvro(attachment)),
         pending: signal(pending)
     };
 

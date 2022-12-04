@@ -5,9 +5,10 @@ import {uid, AvroUid} from './uid';
 export type Attachment = {
     id: uid;
     name: string;
+    type: string;
     width: null | {int: number};
     height: null | {int: number};
-    data: ArrayBuffer;
+    data: Buffer;
 };
 
 export const AvroAttachment = Type.forSchema(
@@ -17,6 +18,7 @@ export const AvroAttachment = Type.forSchema(
         fields: [
             {name: 'id', type: 'uid'},
             {name: 'name', type: 'string'},
+            {name: 'type', type: 'string'},
             {name: 'width', type: ['null', 'int']},
             {name: 'height', type: ['null', 'int']},
             {name: 'data', type: 'bytes'}

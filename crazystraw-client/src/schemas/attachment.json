@@ -4,6 +4,7 @@
     "fields": [
         {"name": "id", "type": "uid"},
         {"name": "name", "type": "string"},
+        {"name": "type", "type": "string"},
         {"name": "width", "type": ["null", "int"]},
         {"name": "height", "type": ["null", "int"]},
         {"name": "data", "type": "bytes"}

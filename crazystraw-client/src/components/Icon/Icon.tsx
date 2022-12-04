@@ -3,7 +3,7 @@ import style from './style.scss';
 import type {JSX} from 'preact';
 import classNames from 'classnames';
 
-type IconType = 'connection' | 'chatBubble' | 'cancel' | 'x' | 'check';
+type IconType = 'connection' | 'chatBubble' | 'cancel' | 'x' | 'check' | 'upload';
 
 const Icon = ({type, title, size, onClick, disabled, color}: {
     type: IconType,

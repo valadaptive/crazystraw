@@ -3,7 +3,7 @@ import {Type} from 'avsc';
 export type Profile = {
     handle: string;
     bio: null | {string: string};
-    avatar: null | {bytes: ArrayBuffer};
+    avatar: null | {bytes: Buffer};
 };
 
 export const AvroProfile = Type.forSchema(

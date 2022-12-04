@@ -11,11 +11,15 @@ const updateOutgoingMessageContents = (store: AppState, identity: string, conten
 
     const existingContents = store.outgoingMessageContents.value[identity];
     if (existingContents) {
-        existingContents.value = contents;
+        existingContents.text.value = contents;
         return;
     }
 
-    store.outgoingMessageContents.value = {...store.outgoingMessageContents.value, [identity]: signal(contents)};
+    store.outgoingMessageContents.value = {...store.outgoingMessageContents.value,
+        [identity]: {
+            text: signal(contents),
+            attachments: signal([])
+        }};
 };
 
 export default updateOutgoingMessageContents;

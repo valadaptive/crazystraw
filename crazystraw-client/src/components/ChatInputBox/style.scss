@@ -1,3 +1,68 @@
+@use '../../colors.scss' as col;
+
+.chat-input-box {
+    flex: 1 1 auto;
+    border-radius: 4px;
+    background-color: col.$base-color-tertiary;
+    padding: 0.5rem;
+    overflow: auto;
+}
+
+.box-and-buttons {
+    display: flex;
+}
+
+.buttons {
+    padding: 0.5rem 0.25rem 0 0;
+    display: flex;
+}
+
 .textbox {
     flex: 1 1 auto;
+    line-height: 1.5;
+}
+
+.attachments {
+    display: flex;
+    gap: 0.25rem;
+    overflow: auto;
+
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    border-bottom: 2px solid col.$divider;
+}
+
+.attachment {
+    border-radius: 4px;
+    background-color: col.$base-color-secondary;
+
+    display: flex;
+    flex: 0 0 auto;
+    max-width: 12rem;
+    gap: 0.5rem;
+    font-size: 90%;
+    padding: 0.5rem;
+    align-items: center;
+}
+
+.file-info {
+    line-height: 110%;
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+.filesize, .filename {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filesize {
+    color: col.$text-detail;
+}
+
+.remove-attachment {
+    flex: 1 1 auto;
+    display: flex;
 }

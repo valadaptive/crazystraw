@@ -2,6 +2,7 @@ import {createContext} from 'preact';
 import {useContext, useMemo} from 'preact/hooks';
 import {signal, effect, Signal} from '@preact/signals';
 
+import ChatAttachment from '../rtc/attachment';
 import {Profile, PersonalProfile} from '../rtc/profile';
 
 import {SignalizedIncomingPeerRequest} from '../event-binding/incoming-peer-request';
@@ -35,14 +36,6 @@ type ProfileData = {
     gatewayConnection: SignalizedGatewayConnection
 };
 
-export type ChatAttachment = {
-    id: string,
-    name: string,
-    width: null | number,
-    height: null | number,
-    data: Blob
-};
-
 export type ChatMessage = {
     id: string,
     timestamp: number,
@@ -50,6 +43,11 @@ export type ChatMessage = {
     contents: string,
     attachments: ChatAttachment[],
     pending: Signal<boolean>
+};
+
+export type OutgoingMessageContents = {
+    text: Signal<string>,
+    attachments: Signal<ChatAttachment[]>
 };
 
 /**
@@ -63,7 +61,7 @@ export type AppState = {
     contacts: Signal<Dictionary<Signal<Contact>>>,
     activeContact: Signal<string | null>,
     chatMessages: Signal<Partial<Dictionary<Signal<ChatMessage[]>>>>,
-    outgoingMessageContents: Signal<Partial<Dictionary<Signal<string>>>>
+    outgoingMessageContents: Signal<Partial<Dictionary<OutgoingMessageContents>>>
 };
 
 export const createStore = (): AppState => {

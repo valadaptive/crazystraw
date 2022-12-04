@@ -199,7 +199,7 @@ ChatChannelProfileEvent
             data: {Profile: {
                 handle: profile.handle,
                 bio: profile.bio ? {string: profile.bio} : null,
-                avatar: profile.avatar ? {bytes: await profile.avatar.arrayBuffer()} : null
+                avatar: profile.avatar ? {bytes: Buffer.from(await profile.avatar.arrayBuffer())} : null
             }}
         };
         const buf = AvroChatData.toBuffer(m).buffer;

@@ -1,5 +1,6 @@
 - Contacts list storage, peer discovery prompt
 - Profile editing
-- Chat box
 - Chat history and storage?
 - Self-hosted STUN/TURN (with authentication?)
+- Attachment progress bar
+- Display attachments
