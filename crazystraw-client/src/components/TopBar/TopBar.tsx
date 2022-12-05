@@ -1,35 +1,30 @@
 import style from './style.scss';
 
 import type {JSX} from 'preact';
+import {useMemo} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
-import {fromByteArray} from 'base64-js';
 
 import Avatar from '../Avatar/Avatar';
 import GatewayConnectionIndicator from '../GatewayConnectionIndicator/GatewayConnectionIndicator';
 
-import deleteIdentityAction from '../../actions/delete-identity';
+import setProfileEditorOpenAction from '../../actions/set-profile-editor-open';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
 const TopBar = (): JSX.Element => {
     const {profileData} = useAppState();
-    const deleteIdentity = useAction(deleteIdentityAction);
+    const setProfileEditorOpen = useAction(setProfileEditorOpenAction);
+
+    const openProfileEditor = useMemo(() => () => setProfileEditorOpen(true), [setProfileEditorOpen]);
 
     const profileInfo = useComputed(() => {
         const profileState = profileData.value.state;
         const profileAndIdentity = profileState === ProfileState.LOADED ? profileData.value : null;
         const profile = profileAndIdentity?.profile;
-        const identity = profileAndIdentity?.identity;
 
-        return <div className={style.profileInfo}>
+        return <div className={style.profileInfo} onClick={openProfileEditor}>
             <Avatar size={32} data={profile?.value.avatar ?? null} />
             <div className={style.handle}>{profile?.value.handle ?? 'No user data'}</div>
-            {profile && identity ?
-                <>
-                    <div className={style.fingerprint}>{fromByteArray(identity.publicKeyFingerprint)}</div>
-                    <button onClick={deleteIdentity}>Delete profile</button>
-                </> :
-                null}
         </div>;
     }).value;
 

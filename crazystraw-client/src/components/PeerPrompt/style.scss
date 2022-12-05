@@ -1,0 +1,32 @@
+@use '../../colors.scss' as col;
+
+.peer-prompt {
+    background-color: col.$base-color-secondary-dark;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.peer-prompt-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.peer-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.divider {
+    border-bottom: 2px solid col.$divider;
+}
+
+.my-fingerprint {
+    display: flex;
+    overflow: auto;
+    align-items: center;
+    gap: 0.5rem;
+    color: col.$text-detail;
+}

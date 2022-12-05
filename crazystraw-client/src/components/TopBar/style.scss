@@ -3,7 +3,7 @@
 .top-bar {
     display: flex;
     background-color: col.$base-color-secondary-dark;
-    padding: 0 1rem;
+    padding: 0 1rem 0 0;
     height: 3.5rem;
     gap: 0.5rem;
 }
@@ -12,6 +12,12 @@
     display: flex;
     gap: 0.25rem;
     align-items: center;
+    padding: 0 1rem;
+
+    &:hover {
+        background-color: col.$base-color-tertiary;
+        cursor: pointer;
+    }
 }
 
 .connection-indicator {

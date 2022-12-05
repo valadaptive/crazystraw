@@ -1,0 +1,72 @@
+@use '../../colors.scss' as col;
+
+.profile-editor {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 4em);
+    max-width: 32rem;
+    overflow: auto;
+    gap: 1rem;
+    padding: 2rem;
+}
+
+.upper {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.avatar {
+    flex: 0 0 auto;
+    display: flex;
+}
+
+.avatar-buttons {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 0.5rem;
+    gap: 0.25rem;
+}
+
+.handle-and-fingerprint {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.handle {
+    font-weight: bold;
+    font-size: 200%;
+}
+
+.fingerprint {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.handle, .fingerprint-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fingerprint-text {
+    color: col.$text-detail;
+    flex: 1 1 0;
+}
+
+.bio {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+.buttons {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.spacer {
+    flex: 1 1 0;
+}

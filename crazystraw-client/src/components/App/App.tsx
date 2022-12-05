@@ -1,7 +1,7 @@
 import style from './style.scss';
 
 import type {JSX} from 'preact';
-import {useState, useMemo} from 'preact/hooks';
+import {useMemo} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 
 import ChatView from '../ChatView/ChatView';
@@ -9,18 +9,20 @@ import ContactsList from '../ContactsList/ContactsList';
 import Modal from '../Modal/Modal';
 import TopBar from '../TopBar/TopBar';
 import PasswordPrompt from '../PasswordPrompt/PasswordPrompt';
+import PeerPrompt from '../PeerPrompt/PeerPrompt';
+import ProfileEditor from '../ProfileEditor/ProfileEditor';
 import ProfileInfo from '../ProfileInfo/ProfileInfo';
 import SetupPrompt from '../SetupPrompt/SetupPrompt';
 
 import setViewedProfileAction from '../../actions/set-viewed-profile';
-import createOutgoingPeerRequestAction from '../../actions/create-outgoing-peer-request';
+import setProfileEditorOpenAction from '../../actions/set-profile-editor-open';
 
 import {useAppState, useAction, ProfileState} from '../../util/state';
 
 const App = (): JSX.Element => {
-    const {profileData, viewedProfile, contacts} = useAppState();
-    const createPeerRequest = useAction(createOutgoingPeerRequestAction);
+    const {profileData, viewedProfile, contacts, profileEditorOpen} = useAppState();
     const setViewedProfile = useAction(setViewedProfileAction);
+    const setProfileEditorOpen = useAction(setProfileEditorOpenAction);
 
     const prompt = useComputed(() => {
         const profileState = profileData.value.state;
@@ -34,24 +36,6 @@ const App = (): JSX.Element => {
             );
         }
     }).value;
-
-    const [peerIdentityString, setPeerIdentityString] = useState('');
-
-    const connect = (): void => {
-        createPeerRequest(peerIdentityString);
-    };
-
-    const peerPrompt = useMemo(() => (
-        <div className={style.peerPrompt}>
-            <div>Add a new contact:</div>
-            <div className={style.peerPromptRow}>
-                <input className={style.peerInput} type="text" value={peerIdentityString} onInput={(event): void => {
-                    setPeerIdentityString((event.target as HTMLInputElement).value);
-                }} />
-                <button onClick={connect}>Connect</button>
-            </div>
-        </div>
-    ), [peerIdentityString, setPeerIdentityString, connect]);
 
     const modal = useMemo(() => {
         const profileToShow = viewedProfile.value;
@@ -69,7 +53,15 @@ const App = (): JSX.Element => {
                 </Modal>
             );
         }
-    }, [viewedProfile.value, profileData.value]);
+
+        if (profileEditorOpen.value) {
+            return (
+                <Modal onClose={(): void => setProfileEditorOpen(false)}>
+                    <ProfileEditor />
+                </Modal>
+            );
+        }
+    }, [viewedProfile.value, profileData.value, profileEditorOpen.value]);
 
     return (
         <div className={style.app}>
@@ -78,7 +70,7 @@ const App = (): JSX.Element => {
                 <div className={style.main}>
                     <div className={style.contactsAndPeerPrompt}>
                         <ContactsList />
-                        {peerPrompt}
+                        <PeerPrompt />
                     </div>
                     <ChatView />
                 </div>

@@ -66,7 +66,8 @@ export type AppState = {
     activeContact: Signal<string | null>,
     chatMessages: Signal<Partial<Dictionary<Signal<ChatMessage[]>>>>,
     outgoingMessageContents: Signal<Partial<Dictionary<OutgoingMessageContents>>>,
-    viewedProfile: Signal<string | null>
+    viewedProfile: Signal<string | null>,
+    profileEditorOpen: Signal<boolean>
 };
 
 export const createStore = (): AppState => {
@@ -86,7 +87,8 @@ export const createStore = (): AppState => {
         activeContact: signal(null),
         chatMessages: signal({}),
         outgoingMessageContents: signal({}),
-        viewedProfile: signal(null)
+        viewedProfile: signal(null),
+        profileEditorOpen: signal(false)
     };
 
     // Persist profile to storage
