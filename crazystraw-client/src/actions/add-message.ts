@@ -1,4 +1,4 @@
-import {signal} from '@preact/signals';
+import {signal, batch} from '@preact/signals';
 
 import ChatAttachment from '../rtc/attachment';
 
@@ -15,31 +15,39 @@ const addMessage = (
     message: Message,
     pending: boolean
 ): void => {
-    let dstMessagesSignal = store.chatMessages.value[channel];
-    const messages = dstMessagesSignal?.value.slice(0) ?? [];
-    if (!dstMessagesSignal) {
-        dstMessagesSignal = signal([]);
-        store.chatMessages.value = {...store.chatMessages.value, [channel]: dstMessagesSignal};
-    }
-
-    const timestamp = idToTimestamp(id);
-    const addedMessage: ChatMessage = {
-        id,
-        timestamp,
-        from,
-        contents: message.contents,
-        attachments: message.attachments.map((attachment): ChatAttachment => ChatAttachment.fromAvro(attachment)),
-        pending: signal(pending)
-    };
-
-    for (let i = Math.max(0, messages.length - 1); i >= 0; i--) {
-        if (i === 0 || idToTimestamp(messages[i].id) <= timestamp) {
-            messages.splice(i + 1, 0, addedMessage);
-            break;
+    batch(() => {
+        let dstMessagesSignal = store.chatMessages.value[channel];
+        const messages = dstMessagesSignal?.value.slice(0) ?? [];
+        if (!dstMessagesSignal) {
+            dstMessagesSignal = signal([]);
+            store.chatMessages.value = {...store.chatMessages.value, [channel]: dstMessagesSignal};
         }
-    }
 
-    dstMessagesSignal.value = messages;
+        const timestamp = idToTimestamp(id);
+        const addedMessage: ChatMessage = {
+            id,
+            timestamp,
+            from,
+            contents: message.contents,
+            attachments: message.attachments.map((attachment): ChatAttachment => ChatAttachment.fromAvro(attachment)),
+            pending: signal(pending)
+        };
+
+        for (let i = Math.max(0, messages.length - 1); i >= 0; i--) {
+            if (i === 0 || idToTimestamp(messages[i].id) <= timestamp) {
+                messages.splice(i + 1, 0, addedMessage);
+                break;
+            }
+        }
+
+        dstMessagesSignal.value = messages;
+
+        const contact = store.contacts.value[from];
+        if (contact) {
+            contact.value.lastMessageTimestamp.value = timestamp;
+        }
+    });
+
 };
 
 export default addMessage;

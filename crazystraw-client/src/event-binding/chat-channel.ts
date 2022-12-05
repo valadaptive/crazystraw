@@ -46,7 +46,7 @@ const signalize = (store: AppState, channel: ChatChannel): SignalizedChatChannel
                 profile.avatar ? new Blob([profile.avatar.bytes]) : null,
                 profile.bio ? profile.bio.string : null
             ),
-            lastMessageTimestamp: Date.now()
+            lastMessageTimestamp: signal(Date.now())
         });
     }, {signal: abortController.signal});
 

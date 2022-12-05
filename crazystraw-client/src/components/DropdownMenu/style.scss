@@ -1,0 +1,44 @@
+@use '../../colors.scss' as col;
+
+.menu {
+    background-color: col.$base-color-tertiary;
+    padding: 1rem;
+    max-height: 12rem;
+    overflow: auto;
+    border-radius: 4px;
+    position: fixed;
+    z-index: 10;
+    left: 0;
+    top: 0;
+}
+
+@mixin option-color($color, $colorValue) {
+    &.#{$color} {
+        color: $colorValue;
+
+        &:hover {
+            background-color: $colorValue;
+            color: col.$text;
+        }
+    }
+
+}
+
+.menu-option {
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:hover {
+        background-color: col.$brand;
+    }
+
+    @include option-color('red', col.$red);
+    @include option-color('yellow', col.$yellow);
+    @include option-color('green', col.$green);
+}
+
+.divider {
+    margin: 0.5rem 0;
+    border-bottom: 2px solid col.$divider;
+}

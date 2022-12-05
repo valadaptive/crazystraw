@@ -22,8 +22,8 @@ export const enum ProfileState {
 
 export type Contact = {
     identity: string,
-    profile: Profile | null,
-    lastMessageTimestamp: number
+    profile: Profile,
+    lastMessageTimestamp: Signal<number>
 };
 
 // This is unsafe unless noUncheckedIndexedAccess is enabled, but that would forbid array indexing too.

@@ -1,7 +1,7 @@
 import style from './style.scss';
 
 import type {JSX} from 'preact';
-import {useMemo} from 'preact/hooks';
+import {useMemo, useState} from 'preact/hooks';
 import {useComputed} from '@preact/signals';
 import classNames from 'classnames';
 
@@ -9,12 +9,16 @@ import {useAppState, useAction, Contact} from '../../util/state';
 import fingerprintIcon from '../../util/digesticon';
 
 import Avatar from '../Avatar/Avatar';
+import DropdownMenu, {DIVIDER} from '../DropdownMenu/DropdownMenu';
 import Indicator, {IndicatorState} from '../Indicator/Indicator';
 import Icon from '../Icon/Icon';
 
+import createOutgoingPeerRequestAction from '../../actions/create-outgoing-peer-request';
 import closeOutgoingPeerRequestAction from '../../actions/close-outgoing-peer-request';
 import closeIncomingPeerRequestAction from '../../actions/close-incoming-peer-request';
+import deleteContactAction from '../../actions/delete-contact';
 import setActiveContactAction from '../../actions/set-active-contact';
+import setViewedProfileAction from '../../actions/set-viewed-profile';
 
 import {
     IncomingPeerRequest,
@@ -28,28 +32,32 @@ import type {SignalizedIncomingPeerRequest} from '../../event-binding/incoming-p
 import type {SignalizedOutgoingPeerRequest} from '../../event-binding/outgoing-peer-request';
 import type {SignalizedChatChannel} from '../../event-binding/chat-channel';
 
-const ContactItem = ({contact, connectionInfo}: {
-    contact: Omit<Contact, 'lastMessageTimestamp'>,
+const ContactItem = ({identity, contact, connectionInfo}: {
+    identity: string,
+    contact?: Omit<Contact, 'lastMessageTimestamp'>,
     connectionInfo: SignalizedIncomingPeerRequest | SignalizedOutgoingPeerRequest | SignalizedChatChannel | null
 }): JSX.Element => {
     const {activeContact} = useAppState();
+    const createOutgoingPeerRequest = useAction(createOutgoingPeerRequestAction);
     const closeOutgoingPeerRequest = useAction(closeOutgoingPeerRequestAction);
     const closeIncomingPeerRequest = useAction(closeIncomingPeerRequestAction);
     const setActiveContact = useAction(setActiveContactAction);
+    const setViewedProfile = useAction(setViewedProfileAction);
+    const deleteContact = useAction(deleteContactAction);
 
     let avatar: Blob | string | null = null;
-    if (contact.profile) {
+    if (contact?.profile) {
         avatar = contact.profile.avatar;
     } else {
         try {
-            avatar = fingerprintIcon(contact.identity);
+            avatar = fingerprintIcon(identity);
         } catch (err) {
             // The digest may be incorrect
         }
     }
 
     const onClickContact = useMemo(() => () => {
-        setActiveContact(contact.identity);
+        setActiveContact(identity);
     }, [contact]);
 
     const connectionInfoLine = useMemo(() => {
@@ -148,29 +156,105 @@ const ContactItem = ({contact, connectionInfo}: {
         if (incomingRequest) closeIncomingPeerRequest(incomingRequest.peerIdentity);
     }, [outgoingRequest, incomingRequest]);
 
-    const includeIncomingRequestButtons = incomingRequest &&
-        connectionInfo?.state.value === IncomingPeerRequestState.PENDING;
-    const includeCancelButton = outgoingRequest &&
-        connectionInfo?.state.value === OutgoingPeerRequestState.PENDING;
-    const includeCloseButton = (outgoingRequest &&
-        (connectionInfo?.state.value === OutgoingPeerRequestState.TIMED_OUT ||
-        connectionInfo?.state.value === OutgoingPeerRequestState.REJECTED ||
-        connectionInfo?.state.value === OutgoingPeerRequestState.PEER_OFFLINE ||
-        connectionInfo?.state.value === OutgoingPeerRequestState.CANCELLED ||
-        connectionInfo?.state.value === OutgoingPeerRequestState.CONNECTION_ERROR)) ||
-        (incomingRequest &&
-            (connectionInfo?.state.value === IncomingPeerRequestState.REJECTED ||
-            connectionInfo?.state.value === IncomingPeerRequestState.CANCELLED ||
-            connectionInfo?.state.value === IncomingPeerRequestState.CONNECTION_ERROR));
-    const includeChannelButtons = channel &&
-        connectionInfo?.state.value !== ChatChannelState.CLOSED;
+    const connectionState = connectionInfo?.state.value;
+    const button = useMemo(() => {
+        // Incoming chat request from a contact. The user can reject the request from the dropdown.
+        if (incomingRequest && connectionState === IncomingPeerRequestState.PENDING) {
+            return <Icon type="check" onClick={acceptRequest} color="green" title="Accept" />;
+        }
+
+        // Let the user cancel the incoming request in case e.g. WebRTC fails
+        if (incomingRequest && connectionState === IncomingPeerRequestState.ACCEPTED) {
+            return <Icon type="cancel" onClick={rejectRequest} title="Cancel" />;
+        }
+
+        // Let the user cancel the outgoing request
+        if (outgoingRequest && (
+            connectionState === OutgoingPeerRequestState.PENDING ||
+            connectionState === OutgoingPeerRequestState.ACCEPTED)) {
+            return <Icon type="cancel" onClick={cancelRequest} title="Cancel" />;
+        }
+
+        // Request has reached terminal state. Let the user close it.
+        if (incomingRequest || outgoingRequest) {
+            return <Icon type="x" onClick={closeRequest} title="Close" />;
+        }
+
+        // There is a channel open. Let the user close it.
+        if (channel && channel.state !== ChatChannelState.CLOSED) {
+            return <Icon type="x" onClick={closeChannel} title="Close connection" />;
+        }
+
+        if (contact && !channel) {
+            return <Icon
+                type="chatBubble"
+                title="Request chat"
+                onClick={(): void => createOutgoingPeerRequest(identity)}
+            />;
+        }
+    }, [
+        incomingRequest,
+        outgoingRequest,
+        channel,
+        connectionState,
+        identity,
+        acceptRequest,
+        rejectRequest,
+        cancelRequest,
+        closeRequest,
+        closeChannel,
+        createOutgoingPeerRequest
+    ]);
+
+    const [contactMenuOpen, setContactMenuOpen] = useState(false);
+
+    const contactRight = useMemo(() => {
+        return <div className={style.contactButtons}>
+            {button}
+            <DropdownMenu<HTMLDivElement>
+                options={[
+                    {
+                        key: 'details',
+                        text: 'Profile details',
+                        onClick: () => setViewedProfile(identity)
+                    },
+                    connectionState === IncomingPeerRequestState.PENDING ? {
+                        key: 'reject',
+                        text: 'Reject chat request',
+                        onClick: rejectRequest
+                    } : null,
+                    contact ? DIVIDER : null,
+                    contact ? {
+                        key: 'delete',
+                        text: 'Remove contact',
+                        color: 'red',
+                        onClick: () => deleteContact(identity)
+                    } : null
+                ]}
+                visible={contactMenuOpen}
+                hideMenu={(): void => setContactMenuOpen(false)}
+                render={(ref): JSX.Element => (
+                    <div
+                        ref={ref}
+                        className={style.contactDropdown}
+                    >
+                        <Icon
+                            type="arrowDown"
+                            title="Options"
+                            onClick={(): void => setContactMenuOpen(!contactMenuOpen)}
+                        />
+                    </div>
+                )}
+            />
+        </div>;
+    }, [button, contactMenuOpen, setContactMenuOpen, setViewedProfile, contact]);
 
     return (
-        <div className={classNames(style.contact, {[style.active]: activeContact.value === contact.identity})}>
+        <div className={classNames(style.contact, {[style.active]: activeContact.value === identity})}>
             <div className={style.contactSelectable} onClick={onClickContact}>
                 <div className={style.avatar}><Avatar data={avatar} size={64} /></div>
                 <div className={style.contactDetails}>
-                    <div className={style.contactName}>{contact.profile?.handle ?? contact.identity}</div>
+                    <div className={style.contactName}>{contact?.profile.handle ?? identity}</div>
                     {connectionInfoLine ?
                         <div className={style.contactIncomingOutgoing}>
                             <div className={style.indicatorPadding}>
@@ -181,25 +265,7 @@ const ContactItem = ({contact, connectionInfo}: {
                         null}
                 </div>
             </div>
-            {includeIncomingRequestButtons || includeCancelButton || includeChannelButtons || includeCloseButton ?
-                <div className={style.contactButtons}>
-                    {includeIncomingRequestButtons ?
-                        <>
-                            <Icon type="check" onClick={acceptRequest} color="green" title="Accept" />
-                            <Icon type="x" onClick={rejectRequest} color="red" title="Reject" />
-                        </> :
-                        null}
-                    {includeCancelButton ?
-                        <Icon type="cancel" onClick={cancelRequest} title="Cancel" /> :
-                        null}
-                    {includeCloseButton ?
-                        <Icon type="x" onClick={closeRequest} title="Close" /> :
-                        null}
-                    {includeChannelButtons ?
-                        <Icon type="x" onClick={closeChannel} title="Close connection" /> :
-                        null}
-                </div> :
-                null}
+            {contactRight}
         </div>
     );
 };
@@ -226,7 +292,7 @@ const ContactsList = (): JSX.Element => {
             }
             contactsArr.push({contact: contactSignal!.value, connectionInfo});
         }
-        contactsArr.sort((a, b) => a.contact.lastMessageTimestamp - b.contact.lastMessageTimestamp);
+        contactsArr.sort((a, b) => a.contact.lastMessageTimestamp.value - b.contact.lastMessageTimestamp.value);
         return contactsArr;
     }).value;
 
@@ -274,27 +340,28 @@ const ContactsList = (): JSX.Element => {
         <div className={style.contactsList}>
             {otherIncomingRequests.map(request => (
                 <ContactItem
-                    contact={{identity: request.request.peerIdentity, profile: null}}
+                    identity={request.request.peerIdentity}
                     connectionInfo={request}
                     key={request.request.peerIdentity}
                 />
             ))}
             {otherOutgoingRequests.map(request => (
                 <ContactItem
-                    contact={{identity: request.request.peerIdentity, profile: null}}
+                    identity={request.request.peerIdentity}
                     connectionInfo={request}
                     key={request.request.peerIdentity}
                 />
             ))}
             {otherOpenChannels.map(channel => (
                 <ContactItem
-                    contact={{identity: channel.channel.peerIdentity, profile: null}}
+                    identity={channel.channel.peerIdentity}
                     connectionInfo={channel}
                     key={channel.channel.peerIdentity}
                 />
             ))}
             {sortedContacts.map(contact => (
                 <ContactItem
+                    identity={contact.contact.identity}
                     contact={contact.contact}
                     connectionInfo={contact.connectionInfo}
                     key={contact.contact.identity}
