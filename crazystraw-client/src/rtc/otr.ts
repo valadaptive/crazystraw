@@ -278,7 +278,7 @@ OTRChannelMessageErrorEvent
     public close (error?: Error): void {
         if (this.state === OTRChannelState.CLOSED) return;
         try {
-            this.rtcChannel.send(new Uint8Array([MessageType.CLOSE]).buffer);
+            void this.rtcChannel.send(new Uint8Array([MessageType.CLOSE]).buffer);
         } catch (err) {
             // Swallow errors
         }
@@ -406,7 +406,7 @@ OTRChannelMessageErrorEvent
     private async waitForKeyExchange (): Promise<void> {
         const commitMessage = await this.expectNextMessage(MessageType.DH_COMMIT);
         const y = await generateKeyPair();
-        this.sendDHKeyMessage(y.publicKeyBytes);
+        await this.sendDHKeyMessage(y.publicKeyBytes);
         const [, encryptedGx, hashGx] = decode(schemas.DH_COMMIT, commitMessage);
 
         const revealSignatureMessage = await this.expectNextMessage(MessageType.REVEAL_SIGNATURE);
@@ -510,7 +510,7 @@ OTRChannelMessageErrorEvent
         const encryptedGx = await encryptWithCounterZero(r, gxBytes);
         const hashGx = await crypto.subtle.digest('SHA-256', gxBytes);
 
-        this.rtcChannel.send(encode(schemas.DH_COMMIT, [
+        await this.rtcChannel.send(encode(schemas.DH_COMMIT, [
             MessageType.DH_COMMIT,
             encryptedGx,
             hashGx
@@ -520,8 +520,8 @@ OTRChannelMessageErrorEvent
     /**
      * Step 2 in the authenticated key exchange. Alice generates their own DH key and sends the public key.
      */
-    private sendDHKeyMessage (gyBytes: ArrayBuffer): void {
-        this.rtcChannel.send(encode(schemas.DH_KEY, [
+    private sendDHKeyMessage (gyBytes: ArrayBuffer): Promise<void> {
+        return this.rtcChannel.send(encode(schemas.DH_KEY, [
             MessageType.DH_KEY,
             gyBytes
         ]));
@@ -571,7 +571,7 @@ OTRChannelMessageErrorEvent
         const {signature, signatureMAC} = await this.generateSignatureData(state.initiator, gxBytes, gyBytes, keyid);
         const rBytes = await crypto.subtle.exportKey('raw', r);
 
-        this.rtcChannel.send(encode(schemas.REVEAL_SIGNATURE, [
+        await this.rtcChannel.send(encode(schemas.REVEAL_SIGNATURE, [
             MessageType.REVEAL_SIGNATURE,
             rBytes,
             signature,
@@ -590,7 +590,7 @@ OTRChannelMessageErrorEvent
     ): Promise<void> {
         const {signature, signatureMAC} = await this.generateSignatureData(state.receiver, gxBytes, gyBytes, keyid);
 
-        this.rtcChannel.send(encode(schemas.SIGNATURE, [
+        await this.rtcChannel.send(encode(schemas.SIGNATURE, [
             MessageType.SIGNATURE,
             signature,
             signatureMAC
@@ -746,7 +746,7 @@ OTRChannelMessageErrorEvent
             savedMACBuffer
         ]);
 
-        this.rtcChannel.send(fullData);
+        await this.rtcChannel.send(fullData);
         // don't clear saved MAC keys until message sends successfully
         this.keyState.savedMACKeys.length = 0;
     }

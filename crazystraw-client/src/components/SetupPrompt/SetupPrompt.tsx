@@ -57,7 +57,7 @@ const SetupPrompt = (): JSX.Element => {
     }, [importSavedProfile]);
 
     const handleCreateIdentity = useMemo(() => () => {
-        createIdentity({
+        void createIdentity({
             handle,
             avatar,
             bio
