@@ -9,7 +9,8 @@ const setProfile = (store: AppState, profile: Profile): void => {
 
     store.profileData.value.profile.value = profile;
 
-    for (const {channel} of Object.values(store.openChannels.value)) {
+    for (const signalizedChannel of Object.values(store.openChannels.value)) {
+        const {channel} = signalizedChannel!;
         void channel.sendProfile(profile);
     }
 };

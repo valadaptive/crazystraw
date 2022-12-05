@@ -61,11 +61,12 @@ export type AppState = {
     profileData: Signal<IdentityData>,
     incomingRequests: Signal<Dictionary<SignalizedIncomingPeerRequest>>,
     outgoingRequests: Signal<Dictionary<SignalizedOutgoingPeerRequest>>,
-    openChannels: Signal<Dictionary<SignalizedChatChannel>>,
-    contacts: Signal<Dictionary<Signal<Contact>>>,
+    openChannels: Signal<Partial<Dictionary<SignalizedChatChannel>>>,
+    contacts: Signal<Partial<Dictionary<Signal<Contact>>>>,
     activeContact: Signal<string | null>,
     chatMessages: Signal<Partial<Dictionary<Signal<ChatMessage[]>>>>,
-    outgoingMessageContents: Signal<Partial<Dictionary<OutgoingMessageContents>>>
+    outgoingMessageContents: Signal<Partial<Dictionary<OutgoingMessageContents>>>,
+    viewedProfile: Signal<string | null>
 };
 
 export const createStore = (): AppState => {
@@ -84,7 +85,8 @@ export const createStore = (): AppState => {
         contacts: signal({}),
         activeContact: signal(null),
         chatMessages: signal({}),
-        outgoingMessageContents: signal({})
+        outgoingMessageContents: signal({}),
+        viewedProfile: signal(null)
     };
 
     // Persist profile to storage

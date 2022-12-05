@@ -51,7 +51,7 @@ const ChatInputBox = (): JSX.Element => {
     const currentContents = contact ? outgoingMessageContents.value[contact] : undefined;
     const profile = profileData.value;
     const currentText = currentContents?.text.value ?? '';
-    const channel = contact ? openChannels.value[contact].channel : null;
+    const channel = contact ? openChannels.value[contact]?.channel : undefined;
 
     const attachments = useComputed(() => {
         const contact = activeContact.value;
@@ -77,9 +77,9 @@ const ChatInputBox = (): JSX.Element => {
             event.preventDefault();
             if (!contact || !currentContents || profile.state !== ProfileState.LOADED) return;
             if (currentContents.text.value === '' && currentContents.attachments.value.length === 0) return;
+            if (!channel) return;
 
             void (async (): Promise<void> => {
-                const channel = openChannels.value[contact].channel;
                 const message = {
                     timestamp: Date.now(),
                     contents: currentText,

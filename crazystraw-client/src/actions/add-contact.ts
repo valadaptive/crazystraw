@@ -4,7 +4,7 @@ import type {AppState, Contact} from '../util/state';
 
 const addContact = (store: AppState, identity: string, contact: Contact): void => {
     if (Object.prototype.hasOwnProperty.call(store.contacts.value, identity)) {
-        store.contacts.value[identity].value = contact;
+        store.contacts.value[identity]!.value = contact;
         return;
     }
 

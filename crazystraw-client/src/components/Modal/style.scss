@@ -1,0 +1,27 @@
+@use '../../colors.scss' as col;
+
+.modal-positioner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    display: flex;
+}
+
+.modal-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+}
+
+.modal {
+    background-color: col.$base-color-primary;
+    overflow: auto;
+    border-radius: 4px;
+    margin: auto;
+}

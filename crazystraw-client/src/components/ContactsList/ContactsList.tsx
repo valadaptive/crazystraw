@@ -214,17 +214,17 @@ const ContactsList = (): JSX.Element => {
 
     const sortedContacts: ContactListing[] = useComputed(() => {
         const contactsArr = [];
-        for (const {value: contact} of Object.values(contacts.value)) {
-            const {identity} = contact;
+        for (const contactSignal of Object.values(contacts.value)) {
+            const {identity} = contactSignal!.value;
             let connectionInfo = null;
             if (Object.prototype.hasOwnProperty.call(incomingRequests.value, identity)) {
                 connectionInfo = incomingRequests.value[identity];
             } else if (Object.prototype.hasOwnProperty.call(outgoingRequests.value, identity)) {
                 connectionInfo = outgoingRequests.value[identity];
             } else if (Object.prototype.hasOwnProperty.call(openChannels.value, identity)) {
-                connectionInfo = openChannels.value[identity];
+                connectionInfo = openChannels.value[identity]!;
             }
-            contactsArr.push({contact, connectionInfo});
+            contactsArr.push({contact: contactSignal!.value, connectionInfo});
         }
         contactsArr.sort((a, b) => a.contact.lastMessageTimestamp - b.contact.lastMessageTimestamp);
         return contactsArr;
@@ -263,7 +263,7 @@ const ContactsList = (): JSX.Element => {
             if (!Object.prototype.hasOwnProperty.call(openChannels.value, identity)) continue;
             // Ignore incoming requests already placed into contacts
             if (Object.prototype.hasOwnProperty.call(contacts.value, identity)) continue;
-            const request = openChannels.value[identity];
+            const request = openChannels.value[identity]!;
             requests.push(request);
         }
         requests.sort((a, b) => a.channel.createdTimestamp - b.channel.createdTimestamp);

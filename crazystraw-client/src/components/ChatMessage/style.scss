@@ -15,6 +15,11 @@ $avatar-size: 48px;
 
 .username {
     font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .avatar {

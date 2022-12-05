@@ -56,26 +56,21 @@
     }
 }
 
-.connection {
-    mask-image: url('../../assets/icons/connection.svg');
+@mixin def-icons($names) {
+    @each $name in $names {
+        .#{$name} {
+            mask-image: url('../../assets/icons/#{$name}.svg');
+        }
+    }
+
 }
 
-.chat-bubble {
-    mask-image: url('../../assets/icons/chat-bubble.svg');
-}
-
-.cancel {
-    mask-image: url('../../assets/icons/cancel.svg');
-}
-
-.x {
-    mask-image: url('../../assets/icons/x.svg');
-}
-
-.check {
-    mask-image: url('../../assets/icons/check.svg');
-}
-
-.upload {
-    mask-image: url('../../assets/icons/upload.svg');
-}
+@include def-icons(
+    connection
+    chat-bubble
+    cancel
+    x
+    check
+    upload
+    fingerprint
+)
