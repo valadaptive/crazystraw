@@ -88,8 +88,8 @@ const ProfileEditor = (): JSX.Element | null => {
             <div className={style.buttons}>
                 <button onClick={deleteIdentity} className={buttons.red}>Delete profile</button>
                 <div className={style.spacer} />
-                <button onClick={saveProfile}>Save</button>
                 <button onClick={close}>Cancel</button>
+                <button onClick={saveProfile} className={buttons.green}>Save</button>
             </div>
         </div>
     );
